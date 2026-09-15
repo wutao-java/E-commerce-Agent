@@ -10,15 +10,8 @@ from pathlib import Path
 
 
 def configure_logging(level: str = "INFO", log_file: str | None = None) -> None:
-    """初始化应用的根日志处理器。
+    """初始化应用的根日志处理器"""
 
-    Args:
-        level: 日志级别名称，不区分大小写。
-        log_file: 可选的日志文件路径；为空时仅输出到控制台。
-
-    Returns:
-        None.
-    """
     # 默认注册控制台处理器，确保未配置文件时仍有日志输出。
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     # 仅在明确提供日志路径时启用文件日志。
