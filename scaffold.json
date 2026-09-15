@@ -1,0 +1,9 @@
+{
+  "skill": "agent-center-scaffold",
+  "project_name": "E-commerce Agent",
+  "service_name": "e-commerce-agent",
+  "features": [
+    "mysql",
+    "jwt"
+  ]
+}

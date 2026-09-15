@@ -1,0 +1,227 @@
+# E-commerce Agent
+
+E-commerce Agent 是一个面向电子商务 Agent 服务的 FastAPI 基础工程，提供统一配置、日志、异步 MySQL 连接管理、JWT 签发与校验、健康检查等通用能力，可作为后续业务接口和 Agent 能力的服务端基础。
+
+## 当前能力
+
+- 基于 FastAPI 提供 HTTP 服务和 OpenAPI 文档
+- 支持 INI 配置、`.env` 文件和系统环境变量
+- 支持控制台日志和按大小轮转的文件日志
+- 基于 SQLAlchemy 2.x 和 asyncmy 提供异步 MySQL 引擎与会话
+- 基于 PyJWT 提供 RS256 JWT 签发与校验
+- 提供无需鉴权的健康检查接口
+- 在应用关闭时释放已创建的数据库连接池
+- 使用 Pytest 覆盖配置、数据库、JWT 和健康检查的基础行为
+
+> 当前仓库提供的是服务基础设施，尚未包含商品、订单、用户等电商业务接口，也未接入具体的大模型或 Agent 工作流。
+
+## 技术栈
+
+- Python 3.11+
+- FastAPI
+- Uvicorn
+- Pydantic 2.x
+- SQLAlchemy 2.x
+- asyncmy
+- PyJWT
+- Pytest
+
+## 项目结构
+
+```text
+E-commerce-agent/
+├── config/
+│   ├── database.py         # 异步数据库配置、引擎和会话管理
+│   ├── logging_config.py   # 控制台与轮转文件日志配置
+│   └── settings.py         # INI、.env 和环境变量加载
+├── db/
+│   └── base.py             # SQLAlchemy 声明式模型基类
+├── security/
+│   └── jwt.py              # JWT 配置、签发与校验
+├── tests/                  # 自动化测试
+├── web/
+│   ├── routers/
+│   │   └── health.py       # 健康检查路由
+│   └── app.py              # FastAPI 应用工厂与生命周期管理
+├── .env.example            # 本地环境变量示例
+├── application.ini         # 默认应用配置
+├── main.py                 # 本地启动入口
+└── pyproject.toml          # 项目元数据与依赖
+```
+
+## 环境要求
+
+- Python 3.11 或更高版本
+- 使用数据库功能时需要可访问的 MySQL 实例
+- 使用 JWT 功能时需要匹配的 RSA 私钥和公钥
+
+数据库和 JWT 资源均按需加载。未配置 MySQL 或 RSA 密钥时，健康检查等不依赖这些资源的功能仍可正常启动。
+
+## 快速开始
+
+### Windows PowerShell
+
+在项目根目录执行：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe main.py
+```
+
+复制 `.env.example` 后，服务默认监听 `127.0.0.1:8000`。
+
+### Linux 或 macOS
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
+cp .env.example .env
+.venv/bin/python -m pytest
+.venv/bin/python main.py
+```
+
+服务启动后可访问：
+
+- 健康检查：<http://127.0.0.1:8000/health>
+- Swagger UI：<http://127.0.0.1:8000/docs>
+- ReDoc：<http://127.0.0.1:8000/redoc>
+- OpenAPI 描述：<http://127.0.0.1:8000/openapi.json>
+
+## 健康检查
+
+PowerShell 请求示例：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+响应内容：
+
+```json
+{
+  "status": "ok",
+  "service": "e-commerce-agent"
+}
+```
+
+该接口仅表示 HTTP 服务可以正常响应，不会主动探测 MySQL 等外部依赖。
+
+## 配置说明
+
+默认配置文件为项目根目录下的 `application.ini`。应用启动时还会自动加载同目录下的 `.env` 文件，配置优先级从高到低为：
+
+1. 当前进程的系统环境变量
+2. `.env` 文件中的变量
+3. `application.ini` 中占位符声明的默认值
+
+如需使用其他 INI 文件，可设置 `AGENT_CENTER_CONFIG`：
+
+```powershell
+$env:AGENT_CENTER_CONFIG = "D:\config\e-commerce-agent.ini"
+.\.venv\Scripts\python.exe main.py
+```
+
+配置会在进程内缓存。修改配置后应重新启动服务，使新值生效。
+
+### 服务配置
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SERVICE_NAME` | `e-commerce-agent` | 服务名称，同时用于 FastAPI 标题和健康检查响应 |
+| `SERVER_HOST` | `0.0.0.0` | 服务监听地址；`.env.example` 为本地开发设置成 `127.0.0.1` |
+| `SERVER_PORT` | `8000` | 服务监听端口，范围为 1～65535 |
+| `LOG_LEVEL` | `INFO` | 日志级别 |
+| `LOG_FILE` | 空 | 日志文件路径；为空时仅输出到控制台 |
+| `START_INTEGRATIONS` | `false` | 外部集成开关预留项，当前未绑定具体集成 |
+
+配置 `LOG_FILE` 后，应用会自动创建日志目录。单个日志文件最大为 10 MiB，并保留 5 个历史文件。
+
+### MySQL 配置
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DATABASE_URL` | 空 | SQLAlchemy 异步 MySQL 连接地址，使用数据库功能时必填 |
+| `DATABASE_POOL_SIZE` | `10` | 连接池常驻连接数，最小值为 1 |
+| `DATABASE_MAX_OVERFLOW` | `20` | 连接池允许临时扩展的连接数，最小值为 0 |
+| `DATABASE_POOL_TIMEOUT` | `30` | 等待可用连接的最长秒数 |
+| `DATABASE_POOL_RECYCLE` | `1800` | 连接回收周期，单位为秒 |
+| `DATABASE_ECHO` | `false` | 是否输出 SQL 日志，生产环境建议保持关闭 |
+
+连接地址示例：
+
+```dotenv
+DATABASE_URL=mysql+asyncmy://app_user:app_password@127.0.0.1:3306/ecommerce?charset=utf8mb4
+```
+
+用户名或密码包含特殊字符时，需要先进行 URL 编码。当前工程只提供数据库引擎、会话和 ORM 基类，未包含数据表模型及数据库迁移脚本。
+
+业务路由中可通过 `config.database.get_session` 获取按请求关闭的异步会话：
+
+```python
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config.database import get_session
+
+
+async def example(session: AsyncSession = Depends(get_session)) -> None:
+    ...
+```
+
+### JWT 配置
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `JWT_PRIVATE_KEY` | 空 | 用于签发令牌的 PEM 私钥 |
+| `JWT_PUBLIC_KEY` | 空 | 用于校验令牌的 PEM 公钥 |
+| `JWT_ALGORITHM` | `RS256` | JWT 签名算法 |
+| `JWT_EXPIRE_MINUTES` | `60` | 默认有效期，单位为分钟，最小值为 1 |
+
+在 `.env` 或部署平台中配置 PEM 密钥时，可用 `\n` 表示换行，程序会在使用前还原。例如：
+
+```dotenv
+JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
+```
+
+签发和校验示例：
+
+```python
+from security.jwt import create_token, decode_token
+
+token = create_token({"sub": "user-1"})
+claims = decode_token(token)
+```
+
+签发时会自动写入 UTC 时间的 `iat` 和 `exp` 声明，并覆盖调用方传入的同名字段。私钥或公钥为空时，实际执行签发或校验操作会抛出明确的配置异常。
+
+## 运行测试
+
+执行全部测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+仅执行单个测试文件：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_health.py
+```
+
+当前测试覆盖：
+
+- INI 默认值与环境变量覆盖
+- 数据库延迟初始化与连接地址校验
+- JWT 私钥缺失时的错误行为
+- 健康检查接口的状态码和响应内容
+
+## 开发约定
+
+- 新增 ORM 模型时继承 `db.base.Base`
+- 新增路由后在 `web.app.create_app` 中注册
+- 敏感信息只通过环境变量或安全的密钥管理服务提供，不提交真实 `.env`、数据库密码或 RSA 密钥
+- 新增功能时同步补充测试和本 README 中对应的配置、接口及启动说明
