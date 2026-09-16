@@ -17,6 +17,10 @@ class LlmSettings(BaseModel):
         default="deepseek-v4-pro",
         min_length=1,
     )
+    classifier_model: str = Field(
+        default="deepseek-v4-pro",
+        min_length=1,
+    )
     timeout_seconds: float = Field(default=30, gt=0)
 
 

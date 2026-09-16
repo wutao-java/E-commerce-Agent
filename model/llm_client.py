@@ -8,7 +8,6 @@ import httpx
 
 from config.llm import get_llm_settings
 
-
 DEFAULT_USER_MESSAGE = "我在小哲电商看到降噪耳机有活动，请问优惠能和会员券一起用吗？"
 
 PLACEHOLDER_API_KEYS = {
@@ -19,9 +18,7 @@ PLACEHOLDER_API_KEYS = {
 }
 
 
-def build_messages(
-    user_message: str = DEFAULT_USER_MESSAGE,
-) -> list[dict[str, str]]:
+def build_messages(user_message: str = DEFAULT_USER_MESSAGE) -> list[dict[str, str]]:
     """构造发送给客服模型的消息列表。"""
 
     system_message = (
@@ -41,14 +38,13 @@ def _api_key_is_missing(api_key: str | None) -> bool:
     return api_key is None or api_key.strip() in PLACEHOLDER_API_KEYS
 
 
-def call_chat_model(
-    messages: list[dict[str, str]],
-    *,
-    api_key: str | None = None,
-    base_url: str | None = None,
-    model: str | None = None,
-    http_client: httpx.Client | None = None,
-) -> dict[str, Any]:
+def call_chat_model(messages: list[dict[str, str]],
+                    *,
+                    api_key: str | None = None,
+                    base_url: str | None = None,
+                    model: str | None = None,
+                    http_client: httpx.Client | None = None,
+                    ) -> dict[str, Any]:
     """调用聊天模型并返回原始响应。"""
 
     settings = get_llm_settings()
@@ -108,9 +104,7 @@ def call_chat_model(
     return payload
 
 
-def extract_assistant_message(
-    model_response: dict[str, Any],
-) -> str:
+def extract_assistant_message(model_response: dict[str, Any]) -> str:
     """从模型响应中提取 assistant message。"""
 
     try:
