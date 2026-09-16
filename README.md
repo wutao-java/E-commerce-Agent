@@ -235,6 +235,20 @@ claims = decode_token(token)
 - 回答模型失败时的确定性安全兜底
 - 核心模块不反向依赖 Web 层的架构边界
 
+## 文档处理（RAG 入库准备）
+
+`rag.document_processing.parse_document(path)` 接收 `.md`、`.docx`、`.pdf` 文件，返回有序的正文块、标题路径、PDF 实际页码、文件 SHA-256 和解析警告。表格保留为 Markdown 文本，便于后续以整张表为单位切片；Word 和 Markdown 没有可靠的原文件页码，结果中保持为空。旧版 `.doc` 请先转换为 `.docx`。
+
+```python
+from rag.document_processing import parse_document
+
+document = parse_document("knowledge/returns.pdf")
+for block in document.blocks:
+    print(block.kind, block.heading_path, block.page_start, block.text)
+```
+
+PDF 使用 Docling 进行版面与表格识别，并通过 RapidOCR 识别扫描页。首次解析 PDF 会下载版面和表格模型；部署时应在构建或预热阶段缓存模型，运行时保留 Hugging Face 缓存目录，离线部署可在模型备齐后设置 `HF_HUB_OFFLINE=1`。转换不完整或没有可提取文字会报错；缺少页码定位、图片没有文字说明等情况记录在 `warnings` 中，入库调用方须先复核。当前模块只解析文件，不负责上传接口、语义切片或向量入库，也不会改变 `/chat` 的行为。
+
 ## 开发约定
 
 - 新增 ORM 模型时继承 `db.base.Base`

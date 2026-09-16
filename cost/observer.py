@@ -86,11 +86,7 @@ def parse_model_usage(payload: dict[str, Any]) -> TokenUsage | None:
     )
 
 
-def build_cost_summary(
-    messages: list[dict[str, str]],
-    answer: str,
-    usage: TokenUsage | None = None,
-) -> CostSummary:
+def build_cost_summary(messages: list[dict[str, str]],answer: str,usage: TokenUsage | None = None) -> CostSummary:
     """优先采用平台计量，缺失时粗估回答模型本轮成本。"""
 
     estimated_prompt_tokens, context_chars = estimate_messages_tokens(messages)
