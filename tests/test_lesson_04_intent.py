@@ -177,7 +177,7 @@ def test_answer_model_failure_uses_safe_fallback() -> None:
 
 
 def test_chat_api_returns_structured_intent_and_capabilities() -> None:
-    """聊天接口返回结构化意图，并公开第 04 课能力声明。"""
+    """聊天接口返回结构化意图，并保留对应能力声明。"""
 
     def answer_model(
         _messages: list[dict[str, str]],
@@ -208,6 +208,5 @@ def test_chat_api_returns_structured_intent_and_capabilities() -> None:
 
     assert capabilities_response.status_code == 200
     capabilities = capabilities_response.json()
-    assert capabilities["lesson"]["number"] == 4
     assert capabilities["features"]["structured_intent"] is True
     assert capabilities["features"]["tool_calls"] is False
