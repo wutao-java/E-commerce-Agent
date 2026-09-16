@@ -13,7 +13,7 @@ CAPABILITIES_PATH = (Path(__file__).resolve().parents[1]/ "agent_capabilities.js
 
 @lru_cache(maxsize=1)
 def load_agent_capabilities() -> dict[str, Any]:
-    """读取并缓存 Agent 能力声明。"""
+    """首次调用时校验并缓存能力声明，进程内不会自动重新读取。"""
 
     with CAPABILITIES_PATH.open("r",encoding="utf-8",) as file:
         capabilities = json.load(file)

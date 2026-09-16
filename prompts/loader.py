@@ -14,7 +14,7 @@ PROMPT_REGISTRY_PATH = (
 
 
 def load_prompt_registry() -> list[PromptFragment]:
-    """从 JSON 文件读取并校验 Prompt Registry。"""
+    """每轮从 JSON 读取并校验片段，修改文件后无需重启即可生效。"""
 
     with PROMPT_REGISTRY_PATH.open("r", encoding="utf-8") as file:
         registry = json.load(file)
@@ -34,6 +34,7 @@ def select_prompt_fragments(
 ) -> list[PromptFragment]:
     """按启用状态和意图选择片段，并按优先级降序排列。"""
 
+    # applies_to 含 all 的公共约束会与本轮意图专属片段一起加载。
     selected = [
         fragment
         for fragment in registry
@@ -56,8 +57,9 @@ def render_prompt_template(
     intent_result: IntentResult,
     fragments: list[PromptFragment],
 ) -> list[dict[str, str]]:
-    """把选中的片段和可信运行时事实渲染为模型 messages。"""
+    """把选中的片段和请求中的运行时上下文渲染为模型 messages。"""
 
+    # 片段顺序来自优先级排序，便于模型按高优先级约束处理冲突。
     fragment_text = "\n\n".join(
         (
             f"[{fragment.fragment_id} | priority={fragment.priority}]\n"
@@ -74,6 +76,7 @@ def render_prompt_template(
         f"{fragment_text}"
     )
 
+    # 当前运行时字段来自请求，并在同一 user 消息中与用户原话分段呈现。
     user_message = (
         "小哲电商系统确认的当前用户事实：\n"
         f"- user_id: {command.runtime_user_id}\n"

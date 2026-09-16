@@ -8,6 +8,7 @@ from config.settings import get_section
 class LlmSettings(BaseModel):
     """定义 OpenAI-compatible 模型连接参数。"""
 
+    # SecretStr 避免在配置对象的普通日志或 repr 中直接显示 API Key。
     api_key: SecretStr = SecretStr("")
     base_url: str = Field(
         default="https://api.deepseek.com",
@@ -17,6 +18,7 @@ class LlmSettings(BaseModel):
         default="deepseek-v4-pro",
         min_length=1,
     )
+    # 意图分类可单独选择模型；未指定时与回答模型使用相同默认值。
     classifier_model: str = Field(
         default="deepseek-v4-pro",
         min_length=1,

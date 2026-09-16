@@ -41,6 +41,7 @@ class CustomerServiceAgent:
     def chat(self, command: ChatCommand) -> ChatResult:
         """按粗意图选择 Prompt 片段并生成客服回答。"""
 
+        # 计数只记录当前进程内该会话的调用次数，不代表持久化会话状态。
         message_count = self._increment_message_count(
             command.session_id
         )
@@ -49,8 +50,10 @@ class CustomerServiceAgent:
             command.user_message,
             classifier_call=self._classifier_call,
         )
+        # 先准备不依赖外部事实的安全话术，供回答模型不可用时使用。
         fallback_answer = build_fallback_answer(intent_result)
 
+        # 只将匹配本轮意图的启用片段送入模型，避免每轮注入全部规则。
         registry = load_prompt_registry()
         fragments = select_prompt_fragments(
             intent_result.intent,
@@ -68,6 +71,7 @@ class CustomerServiceAgent:
             model_call=self._model_call,
         )
 
+        # 这些摘要描述实际处理步骤，并非暴露模型的内部推理过程。
         return ChatResult(
             session_id=command.session_id,
             answer=model_answer.answer,

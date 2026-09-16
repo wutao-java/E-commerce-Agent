@@ -46,9 +46,10 @@ def call_chat_model(
     model: str | None = None,
     http_client: httpx.Client | None = None,
 ) -> dict[str, Any]:
-    """调用聊天模型并返回原始响应。"""
+    """按 OpenAI-compatible 协议调用模型，确保响应是 JSON 对象。"""
 
     settings = get_llm_settings()
+    # 显式传参优先于配置，便于调用方针对单次请求替换连接或模型。
     resolved_api_key = (
         api_key
         if api_key is not None
@@ -75,6 +76,7 @@ def call_chat_model(
         "timeout": settings.timeout_seconds,
     }
 
+    # 将传输错误归一为运行时错误，供上层决定是否使用安全话术。
     try:
         if http_client is None:
             response = httpx.post(
@@ -104,7 +106,7 @@ def call_chat_model(
 
 
 def extract_assistant_message(model_response: dict[str, Any]) -> str:
-    """从模型响应中提取 assistant message。"""
+    """只接受首个 choice 中非空的 assistant 文本。"""
 
     try:
         content = model_response["choices"][0]["message"]["content"]

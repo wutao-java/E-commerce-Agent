@@ -10,7 +10,7 @@ from .intent import Intent, IntentResult
 
 
 class ChatCommand(BaseModel):
-    """表示一次已经通过接口校验的客服请求。"""
+    """表示与 HTTP 协议解耦的客服输入，供 Agent 编排使用。"""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -24,7 +24,7 @@ class ChatCommand(BaseModel):
 
 
 class ChatResult(BaseModel):
-    """表示客服 Agent 与传输协议无关的处理结果。"""
+    """保存回答、意图和本轮状态，由接口层转换为响应。"""
 
     session_id: str
     answer: str

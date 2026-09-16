@@ -17,7 +17,7 @@ ClassifierModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
 
 
 def build_classifier_messages(user_message: str) -> list[dict[str, str]]:
-    """构造只允许返回粗意图 JSON 的分类消息。"""
+    """用领域模型定义允许的意图，约束分类模型只返回粗意图 JSON。"""
 
     allowed_intents = ", ".join(get_args(Intent))
     return [
@@ -48,6 +48,7 @@ def parse_classifier_json(content: str) -> dict[str, Any] | None:
     """解析纯 JSON 或 Markdown 代码块中的 JSON。"""
 
     text = content.strip()
+    # 兼容模型偶尔附带的代码围栏，实际结构仍交给 JSON 解析器校验。
     if text.startswith("```"):
         lines = text.splitlines()[1:]
         if lines and lines[-1].strip() == "```":
@@ -70,7 +71,7 @@ def call_classifier_model(messages: list[dict[str, str]]) -> dict[str, Any]:
 
 
 def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall = call_classifier_model) -> IntentResult | None:
-    """调用分类模型并校验结构化输出。"""
+    """调用轻量模型；调用失败或输出不符合意图契约时交还上层决策。"""
 
     try:
         model_response = model_call(build_classifier_messages(user_message))
@@ -95,4 +96,5 @@ def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall
         ValueError,
         ValidationError,
     ):
+        # 不把模型的不可用或格式错误当成确定的分类结果。
         return None

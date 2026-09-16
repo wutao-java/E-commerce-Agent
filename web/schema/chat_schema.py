@@ -8,11 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain import Intent, IntentResult
 
+# 请求可以携带展示偏好，但当前路由尚未用它改变 Agent 的返回内容。
 ReasoningView = Literal["default", "off", "summary", "teaching"]
 
 
 class ChatRequest(BaseModel):
-    """定义客服聊天请求。"""
+    """校验 HTTP 输入；runtime_* 字段目前由调用方在请求中提供。"""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -55,7 +56,7 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """定义带结构化意图的客服聊天响应。"""
+    """暴露回答、结构化意图与本轮处理状态的 HTTP 响应。"""
 
     session_id: str
     answer: str

@@ -13,7 +13,7 @@ AnswerModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
 
 
 class GroundedAnswerResult(BaseModel):
-    """记录最终回答是否由真实模型生成。"""
+    """记录实际返回的回答、模型使用情况和兜底原因。"""
 
     answer: str
     used_model: bool = False
@@ -26,12 +26,13 @@ def compose_grounded_answer(
     deterministic_answer: str,
     model_call: AnswerModelCall = call_chat_model,
 ) -> GroundedAnswerResult:
-    """用完整 Prompt 调用模型，失败时返回安全话术。"""
+    """用完整 Prompt 调用模型；运行时失败则返回预先生成的安全话术。"""
 
     try:
         model_response = model_call(messages)
         answer = extract_assistant_message(model_response)
     except RuntimeError:
+        # 模型请求失败或回答为空时，上层仍能返回确定性的安全话术。
         return GroundedAnswerResult(
             answer=deterministic_answer,
             fallback_reason="model_unavailable",

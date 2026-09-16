@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class PromptFragment(BaseModel):
-    """表示 Prompt Registry 中一个可选择的规则片段。"""
+    """描述片段内容、适用意图和排序优先级，供本轮筛选使用。"""
 
     fragment_id: str
     title: str

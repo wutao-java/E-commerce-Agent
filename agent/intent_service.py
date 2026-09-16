@@ -11,7 +11,7 @@ ClassifierCall = Callable[[str], IntentResult | None]
 
 
 def classify_intent(user_message: str,classifier_call: ClassifierCall = classify_intent_with_model) -> IntentResult:
-    """识别客服消息意图，无法可靠判断时返回 unknown。"""
+    """优先采用高置信规则，歧义交给模型，均失败时返回 unknown。"""
 
     rule_result = plan_intent_by_rules(user_message)
     if rule_result is not None:
@@ -21,6 +21,7 @@ def classify_intent(user_message: str,classifier_call: ClassifierCall = classify
     if model_result is not None:
         return model_result
 
+    # 保留 unknown，而非将缺乏证据的消息归入某个业务意图。
     return IntentResult(
         intent="unknown",
         source="rules_fallback",

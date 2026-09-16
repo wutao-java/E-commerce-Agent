@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """管理应用日志和外部资源生命周期。"""
+    """启动时配置日志，关闭时只释放已创建的数据库资源。"""
 
     settings = get_settings()
     configure_logging(
@@ -43,6 +43,7 @@ def create_app(agent_provider: AgentProvider | None = None) -> FastAPI:
     )
 
     if agent_provider is None:
+        # 默认在应用生命周期内复用同一 Agent，以保留进程内会话计数。
         default_agent = CustomerServiceAgent()
         agent_provider = lambda: default_agent
 
@@ -53,7 +54,7 @@ def create_app(agent_provider: AgentProvider | None = None) -> FastAPI:
 
     @application.exception_handler(Exception)
     async def system_exception_handler(_request: Request,exc: Exception) -> JSONResponse:
-        """处理未捕获的系统异常。"""
+        """记录未捕获错误，但不把内部异常详情返回给客户端。"""
 
         logger.exception(
             "Unhandled request error",

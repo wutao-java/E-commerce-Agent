@@ -4,7 +4,7 @@ from domain import IntentResult
 
 
 def build_fallback_answer(intent_result: IntentResult) -> str:
-    """根据粗意图生成不越过业务边界的确定性回答。"""
+    """按粗意图提供固定话术，不推断尚未接入的订单或商品事实。"""
 
     if intent_result.intent == "complaint":
         return (

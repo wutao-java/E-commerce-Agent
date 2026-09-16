@@ -23,7 +23,7 @@ AgentProvider = Callable[[], ChatAgent]
 
 
 def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
-    """创建聊天相关路由。"""
+    """通过注入 Agent 提供者创建路由，便于应用复用实例和测试替换。"""
 
     router = APIRouter(tags=["agent"])
 
@@ -36,8 +36,9 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
 
     @router.post("/chat", response_model=ChatResponse)
     def chat(request: ChatRequest) -> ChatResponse:
-        """接收聊天请求并交给 Agent 处理。"""
+        """将 HTTP 请求转换为内部命令，再把处理结果校验为响应。"""
         try:
+            # 当前只转交 Agent 所需字段；展示级别和 debug 尚未参与处理。
             command = ChatCommand(
                 session_id=request.session_id,
                 runtime_user_id=request.runtime_user_id,
@@ -50,6 +51,7 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
             result = agent_provider().chat(command)
             return ChatResponse.model_validate(result.model_dump())
         except RuntimeError as exc:
+            # 业务流程抛出的 RuntimeError 统一映射为 503，其余异常交给全局处理。
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(exc),
