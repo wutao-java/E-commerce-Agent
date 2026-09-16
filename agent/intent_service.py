@@ -10,10 +10,7 @@ from .intent_rules import plan_intent_by_rules
 ClassifierCall = Callable[[str], IntentResult | None]
 
 
-def classify_intent(
-    user_message: str,
-    classifier_call: ClassifierCall = classify_intent_with_model,
-) -> IntentResult:
+def classify_intent(user_message: str,classifier_call: ClassifierCall = classify_intent_with_model) -> IntentResult:
     """识别客服消息意图，无法可靠判断时返回 unknown。"""
 
     rule_result = plan_intent_by_rules(user_message)

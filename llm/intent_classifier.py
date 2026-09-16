@@ -69,10 +69,7 @@ def call_classifier_model(messages: list[dict[str, str]]) -> dict[str, Any]:
     return call_chat_model(messages, model=settings.classifier_model)
 
 
-def classify_intent_with_model(
-    user_message: str,
-    model_call: ClassifierModelCall = call_classifier_model,
-) -> IntentResult | None:
+def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall = call_classifier_model) -> IntentResult | None:
     """调用分类模型并校验结构化输出。"""
 
     try:
