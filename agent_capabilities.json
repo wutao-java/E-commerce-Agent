@@ -1,0 +1,50 @@
+{
+  "schema_version": "agent_capabilities_v1",
+  "lesson": {
+    "id": "lesson-02-chat-service",
+    "number": 2,
+    "title": "Agent 对话接口",
+    "summary": "当前版本开放 /chat 接口、运行时上下文和最小响应结构。"
+  },
+  "agent": {
+    "name": "小哲电商客服 Agent",
+    "version": "lesson-02-chat-service"
+  },
+  "endpoints": {
+    "health": true,
+    "chat": true,
+    "chat_resume": false,
+    "trace": false,
+    "eval_run": false
+  },
+  "features": {
+    "chat": true,
+    "runtime_context": true,
+    "reasoning_summary": false,
+    "reasoning_content": false,
+    "structured_intent": false,
+    "rag_citations": false,
+    "tool_calls": false,
+    "workflow": false,
+    "human_approval": false,
+    "memory": false,
+    "hooks": false,
+    "trace": false,
+    "evaluation": false,
+    "cost_summary": false
+  },
+  "disabled_reasons": {
+    "reasoning_summary": "当前版本不返回推理摘要。",
+    "reasoning_content": "当前版本不公开模型推理内容。",
+    "structured_intent": "当前版本尚未接入结构化意图识别。",
+    "rag_citations": "当前版本尚未接入 RAG。",
+    "tool_calls": "当前版本尚未接入业务工具。",
+    "workflow": "当前版本尚未接入工作流。",
+    "human_approval": "当前版本尚未接入人工审批。",
+    "memory": "当前会话计数不是生产级会话记忆。",
+    "hooks": "当前版本尚未接入 Hooks。",
+    "trace": "当前版本尚未接入调用轨迹。",
+    "evaluation": "当前版本尚未接入回归评测。",
+    "cost_summary": "当前版本尚未接入成本统计。"
+  }
+}
