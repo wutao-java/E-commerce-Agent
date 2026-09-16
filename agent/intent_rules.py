@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from web.schema import Intent, IntentResult
+from domain import Intent, IntentResult
 
 
 IntentRule = tuple[Intent, list[str], str]

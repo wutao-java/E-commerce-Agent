@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 from typing import Any, get_args
-from collections.abc import Callable
-from pydantic import ValidationError
-from config.llm import get_llm_settings
-from web.schema import Intent, IntentResult
-from .llm_client import call_chat_model, extract_assistant_message
 
-# 定义模型调用类型
-ClassifierModelCall = Callable[[list[dict[str, str]]],dict[str, Any]]
+from pydantic import ValidationError
+
+from config.llm import get_llm_settings
+from domain import Intent, IntentResult
+
+from .client import call_chat_model, extract_assistant_message
+
+ClassifierModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
+
 
 def build_classifier_messages(user_message: str) -> list[dict[str, str]]:
-    """构造只允许返回粗意图 JSON 的分类消息。Prompt 只允许分类，不允许模型生成客服承诺或执行业务动作"""
+    """构造只允许返回粗意图 JSON 的分类消息。"""
 
     allowed_intents = ", ".join(get_args(Intent))
-
     return [
         {
             "role": "system",
@@ -42,18 +44,14 @@ def build_classifier_messages(user_message: str) -> list[dict[str, str]]:
     ]
 
 
-def parse_classifier_json(content: str,) -> dict[str, Any] | None:
-    """解析纯 JSON 或 Markdown 代码块中的 JSON。解析失败返回 None，不尝试从错误文本中猜测意图。"""
+def parse_classifier_json(content: str) -> dict[str, Any] | None:
+    """解析纯 JSON 或 Markdown 代码块中的 JSON。"""
 
     text = content.strip()
-
     if text.startswith("```"):
-        lines = text.splitlines()
-        lines = lines[1:]
-
+        lines = text.splitlines()[1:]
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
-
         text = "\n".join(lines).strip()
 
     try:
@@ -68,23 +66,19 @@ def call_classifier_model(messages: list[dict[str, str]]) -> dict[str, Any]:
     """使用独立配置的轻量模型完成意图分类。"""
 
     settings = get_llm_settings()
-
-    return call_chat_model(
-        messages,
-        model=settings.classifier_model,
-    )
+    return call_chat_model(messages, model=settings.classifier_model)
 
 
-def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall = call_classifier_model) -> IntentResult | None:
+def classify_intent_with_model(
+    user_message: str,
+    model_call: ClassifierModelCall = call_classifier_model,
+) -> IntentResult | None:
     """调用分类模型并校验结构化输出。"""
 
     try:
-        model_response = model_call(
-            build_classifier_messages(user_message)
-        )
+        model_response = model_call(build_classifier_messages(user_message))
         content = extract_assistant_message(model_response)
         payload = parse_classifier_json(content)
-
         if payload is None:
             return None
 

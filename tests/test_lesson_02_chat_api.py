@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from domain import ChatCommand, ChatResult, IntentResult
 from web.app import create_app
 
 
@@ -32,13 +33,23 @@ class StubAgent:
     def __init__(self) -> None:
         self.received_request: Any | None = None
 
-    def chat(self, request: Any) -> dict[str, Any]:
+    def chat(self, request: ChatCommand) -> ChatResult:
         self.received_request = request
 
-        return {
-            "session_id": request.session_id,
-            "answer": "这是测试客服回答。",
-            "session_state": {
+        intent_result = IntentResult(
+            intent="general_chat",
+            source="rules",
+            confidence=0.95,
+            matched_keywords=["你好"],
+            explanation="测试意图结果。",
+        )
+        return ChatResult(
+            session_id=request.session_id,
+            answer="这是测试客服回答。",
+            intent=intent_result.intent,
+            intent_result=intent_result,
+            reasoning_summary=["这是测试执行摘要。"],
+            session_state={
                 "agent_version": "lesson-02-chat-service",
                 "message_count": 1,
                 "runtime_context": {
@@ -49,13 +60,13 @@ class StubAgent:
                     "page_context": request.runtime_context or {},
                 },
             },
-        }
+        )
 
 
 class FailingAgent:
     """模拟模型服务不可用。"""
 
-    def chat(self, _request: Any) -> dict[str, Any]:
+    def chat(self, _request: ChatCommand) -> ChatResult:
         raise RuntimeError("模型服务暂时不可用")
 
 
@@ -84,6 +95,15 @@ def test_chat_returns_stable_response_contract(
     assert response.json() == {
         "session_id": "session-001",
         "answer": "这是测试客服回答。",
+        "intent": "general_chat",
+        "intent_result": {
+            "intent": "general_chat",
+            "source": "rules",
+            "confidence": 0.95,
+            "matched_keywords": ["你好"],
+            "explanation": "测试意图结果。",
+        },
+        "reasoning_summary": ["这是测试执行摘要。"],
         "session_state": {
             "agent_version": "lesson-02-chat-service",
             "message_count": 1,

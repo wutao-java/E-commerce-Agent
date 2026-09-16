@@ -1,19 +1,22 @@
 # E-commerce Agent
 
-E-commerce Agent 是一个面向电子商务 Agent 服务的 FastAPI 基础工程，提供统一配置、日志、异步 MySQL 连接管理、JWT 签发与校验、健康检查等通用能力，可作为后续业务接口和 Agent 能力的服务端基础。
+E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当前版本在通用配置、日志、异步 MySQL 和 JWT 基础上，提供聊天接口、规则优先的结构化意图识别和 OpenAI-compatible 模型回答能力。
 
 ## 当前能力
 
 - 基于 FastAPI 提供 HTTP 服务和 OpenAPI 文档
+- 提供 `/chat` 聊天接口和 `/capabilities` 能力声明
+- 支持规则优先、分类模型兜底的结构化意图识别
+- 支持回答模型失败时回退到确定性安全话术
 - 支持 INI 配置、`.env` 文件和系统环境变量
 - 支持控制台日志和按大小轮转的文件日志
 - 基于 SQLAlchemy 2.x 和 asyncmy 提供异步 MySQL 引擎与会话
 - 基于 PyJWT 提供 RS256 JWT 签发与校验
 - 提供无需鉴权的健康检查接口
 - 在应用关闭时释放已创建的数据库连接池
-- 使用 Pytest 覆盖配置、数据库、JWT 和健康检查的基础行为
+- 使用 Pytest 覆盖模型客户端、聊天契约、意图识别和依赖边界
 
-> 当前仓库提供的是服务基础设施，尚未包含商品、订单、用户等电商业务接口，也未接入具体的大模型或 Agent 工作流。
+> 当前版本尚未接入商品、订单、RAG、工具调用和售后工作流，不能执行退款、赔偿或其他业务动作。
 
 ## 技术栈
 
@@ -30,17 +33,29 @@ E-commerce Agent 是一个面向电子商务 Agent 服务的 FastAPI 基础工�
 
 ```text
 E-commerce-agent/
+├── agent/
+│   ├── customer_service_agent.py # 客服流程编排
+│   ├── intent_service.py         # 规则与分类模型的意图识别编排
+│   └── intent_rules.py           # 高置信意图规则
 ├── config/
 │   ├── database.py         # 异步数据库配置、引擎和会话管理
 │   ├── logging_config.py   # 控制台与轮转文件日志配置
 │   └── settings.py         # INI、.env 和环境变量加载
 ├── db/
 │   └── base.py             # SQLAlchemy 声明式模型基类
+├── domain/
+│   ├── chat.py             # Agent 内部聊天命令与结果
+│   └── intent.py           # 意图类型与识别结果
+├── llm/
+│   ├── client.py           # OpenAI-compatible 通用客户端
+│   ├── intent_classifier.py # 意图分类模型适配器
+│   └── answer_generator.py # 客服回答模型适配器
 ├── security/
 │   └── jwt.py              # JWT 配置、签发与校验
 ├── tests/                  # 自动化测试
 ├── web/
 │   ├── routers/
+│   │   ├── chat.py         # HTTP DTO 与内部契约转换
 │   │   └── health.py       # 健康检查路由
 │   └── app.py              # FastAPI 应用工厂与生命周期管理
 ├── .env.example            # 本地环境变量示例
@@ -209,15 +224,16 @@ claims = decode_token(token)
 仅执行单个测试文件：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_health.py
+.\.venv\Scripts\python.exe -m pytest tests\test_lesson_04_intent.py
 ```
 
 当前测试覆盖：
 
-- INI 默认值与环境变量覆盖
-- 数据库延迟初始化与连接地址校验
-- JWT 私钥缺失时的错误行为
-- 健康检查接口的状态码和响应内容
+- OpenAI-compatible 消息和模型客户端
+- `/chat` 请求校验、响应契约和异常映射
+- 规则优先、分类模型兜底的结构化意图识别
+- 回答模型失败时的确定性安全兜底
+- 核心模块不反向依赖 Web 层的架构边界
 
 ## 开发约定
 

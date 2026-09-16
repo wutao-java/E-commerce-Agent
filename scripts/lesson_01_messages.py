@@ -1,6 +1,6 @@
 """第 01 课：运行一次本地模型消息验证。"""
 
-from model import (
+from llm import (
     build_messages,
     call_chat_model,
     extract_assistant_message,

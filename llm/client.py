@@ -38,17 +38,17 @@ def _api_key_is_missing(api_key: str | None) -> bool:
     return api_key is None or api_key.strip() in PLACEHOLDER_API_KEYS
 
 
-def call_chat_model(messages: list[dict[str, str]],
-                    *,
-                    api_key: str | None = None,
-                    base_url: str | None = None,
-                    model: str | None = None,
-                    http_client: httpx.Client | None = None,
-                    ) -> dict[str, Any]:
+def call_chat_model(
+    messages: list[dict[str, str]],
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    http_client: httpx.Client | None = None,
+) -> dict[str, Any]:
     """调用聊天模型并返回原始响应。"""
 
     settings = get_llm_settings()
-
     resolved_api_key = (
         api_key
         if api_key is not None
@@ -63,7 +63,6 @@ def call_chat_model(messages: list[dict[str, str]],
         base_url if base_url is not None else settings.base_url
     ).rstrip("/")
     resolved_model = model if model is not None else settings.model
-
     request_kwargs = {
         "headers": {
             "Authorization": f"Bearer {resolved_api_key}",

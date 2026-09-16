@@ -6,17 +6,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ReasoningView = Literal["default", "off", "summary", "teaching"]  # 限定推理内容的展示模式。
-IntentSource = Literal["rules", "classifier", "rules_fallback"]  # 限定意图识别结果的来源。
-Intent = Literal[
-    "general_chat",  # 通用闲聊。
-    "promotion_consult",  # 优惠活动咨询。
-    "product_consult",  # 商品信息咨询。
-    "order_query",  # 订单信息查询。
-    "refund_request",  # 退款申请。
-    "complaint",  # 用户投诉。
-    "unknown",  # 无法识别的意图。
-]
+from domain import Intent, IntentResult
+
+ReasoningView = Literal["default", "off", "summary", "teaching"]
 
 
 class ChatRequest(BaseModel):
@@ -60,16 +52,6 @@ class ChatRequest(BaseModel):
         default=None,
         description="页面等运行时上下文",
     )
-
-
-class IntentResult(BaseModel):  # 声明意图识别结果的数据模型。
-    """定义系统可读的意图识别结果。"""
-
-    intent: Intent  # 保存识别出的意图类型。
-    source: IntentSource  # 保存意图识别结果的来源。
-    confidence: float = Field(ge=0.0, le=1.0)  # 保存取值范围为 0 到 1 的置信度。
-    matched_keywords: list[str] = Field(default_factory=list)  # 保存命中的关键词，默认使用空列表。
-    explanation: str  # 保存意图识别结果的说明。
 
 
 class ChatResponse(BaseModel):

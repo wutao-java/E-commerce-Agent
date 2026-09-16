@@ -5,12 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 import json
 from typing import Any
+
 from pydantic import BaseModel
-from web.schema import IntentResult
-from .llm_client import call_chat_model, extract_assistant_message
 
+from domain import IntentResult
 
-AnswerModelCall = Callable[[list[dict[str, str]]],dict[str, Any]]
+from .client import call_chat_model, extract_assistant_message
+
+AnswerModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
+
 
 class GroundedAnswerResult(BaseModel):
     """记录最终回答是否由真实模型生成。"""
@@ -63,7 +66,4 @@ def compose_grounded_answer(
             fallback_reason="model_unavailable",
         )
 
-    return GroundedAnswerResult(
-        answer=answer,
-        used_model=True,
-    )
+    return GroundedAnswerResult(answer=answer, used_model=True)

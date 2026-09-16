@@ -6,10 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent import CustomerServiceAgent
-from agent.CustomerServiceAgent import classify_intent
-from model import classify_intent_with_model
+from agent.intent_service import classify_intent
+from domain import ChatCommand, IntentResult
+from llm import classify_intent_with_model
 from web.app import create_app
-from web.schema import ChatRequest, IntentResult
 
 
 def model_response(content: str) -> dict[str, Any]:
@@ -159,7 +159,7 @@ def test_answer_model_failure_uses_safe_fallback() -> None:
         classifier_call=unexpected_classifier,
     )
     response = agent.chat(
-        ChatRequest(
+        ChatCommand(
             session_id="lesson04-fallback",
             runtime_user_id="U1001",
             user_message="物流太慢了，我要退款。",
