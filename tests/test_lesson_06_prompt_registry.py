@@ -115,7 +115,7 @@ def test_agent_exposes_prompt_registry_state() -> None:
 
     assert result.intent == "promotion_consult"
     assert result.session_state["agent_version"] == (
-        "lesson-06-prompt-registry"
+        "lesson-07-token-cost-observation"
     )
     assert prompt_registry["selected_fragment_count"] == 4
     assert "promotion-current-audio-rule" in (

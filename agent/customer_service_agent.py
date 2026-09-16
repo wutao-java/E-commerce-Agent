@@ -6,6 +6,7 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Any
 
+from cost.observer import build_cost_summary
 from domain import ChatCommand, ChatResult
 from llm import (
     call_chat_model,
@@ -36,6 +37,7 @@ class CustomerServiceAgent:
         self._model_call = model_call
         self._classifier_call = classifier_call
         self._message_count_by_session: dict[str, int] = {}
+        self._cost_event_count_by_session: dict[str, int] = {}
         self._session_lock = Lock()
 
     def chat(self, command: ChatCommand) -> ChatResult:
@@ -71,12 +73,37 @@ class CustomerServiceAgent:
             model_call=self._model_call,
         )
 
+        # 只观察回答模型实际收到的 Prompt；独立意图分类调用不计入本轮摘要。
+        cost_summary = build_cost_summary(
+            messages,
+            model_answer.answer,
+            model_answer.usage,
+        )
+        with self._session_lock:
+            event_count = (
+                self._cost_event_count_by_session.get(command.session_id, 0)
+                + 1
+            )
+            self._cost_event_count_by_session[command.session_id] = event_count
+
+        # 只保留事件计数；latest 随本轮响应返回，不在内存里无限累积历史。
+        cost_event = {
+            "message_count": message_count,
+            "intent": intent_result.intent,
+            "selected_fragment_ids": [
+                fragment.fragment_id
+                for fragment in fragments
+            ],
+            "cost_summary": cost_summary.model_dump(),
+        }
+
         # 这些摘要描述实际处理步骤，并非暴露模型的内部推理过程。
         return ChatResult(
             session_id=command.session_id,
             answer=model_answer.answer,
             intent=intent_result.intent,
             intent_result=intent_result,
+            cost_summary=cost_summary,
             reasoning_summary=[
                 (
                     "后端先识别粗意图，再从 Prompt Registry "
@@ -90,9 +117,13 @@ class CustomerServiceAgent:
                     "这一版仍然是 Prompt 方案，只是把整面规则墙"
                     "拆成可管理的片段。"
                 ),
+                (
+                    f"本轮回答模型 token 来源为 {cost_summary.token_source}，"
+                    f"总 token 为 {cost_summary.total_tokens}。"
+                ),
             ],
             session_state={
-                "agent_version": "lesson-06-prompt-registry",
+                "agent_version": "lesson-07-token-cost-observation",
                 "message_count": message_count,
                 "runtime_context": {
                     "user_id": command.runtime_user_id,
@@ -121,9 +152,13 @@ class CustomerServiceAgent:
                         if not fragment.enabled
                     ],
                 },
+                "cost_log": {
+                    "event_count": event_count,
+                    "latest": cost_event,
+                },
                 "next_gap": (
-                    "Prompt 片段更好维护，但每轮仍要把规则文本"
-                    "送进模型，成本问题还没有被观察。"
+                    "Prompt 片段更好维护，但每轮仍有 token 成本；"
+                    "后续需要减少无关上下文。"
                 ),
             },
         )

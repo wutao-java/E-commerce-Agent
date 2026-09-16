@@ -24,6 +24,9 @@ class LlmSettings(BaseModel):
         min_length=1,
     )
     timeout_seconds: float = Field(default=30, gt=0)
+    # 演示单价只用于成本趋势观察，不替代模型平台的真实账单。
+    input_cny_per_1k: float = Field(default=0.001, ge=0)
+    output_cny_per_1k: float = Field(default=0.002, ge=0)
 
 
 def get_llm_settings() -> LlmSettings:

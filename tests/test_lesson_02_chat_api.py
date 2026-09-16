@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from domain import ChatCommand, ChatResult, IntentResult
+from domain import ChatCommand, ChatResult, CostSummary, IntentResult
 from web.app import create_app
 
 
@@ -48,6 +48,17 @@ class StubAgent:
             answer="这是测试客服回答。",
             intent=intent_result.intent,
             intent_result=intent_result,
+            cost_summary=CostSummary(
+                prompt_tokens=100,
+                answer_tokens=20,
+                total_tokens=120,
+                token_source="model_usage",
+                estimated_input_cost_cny=0.0001,
+                estimated_output_cost_cny=0.00004,
+                estimated_total_cost_cny=0.00014,
+                context_chars=320,
+                pricing_note="测试数据",
+            ),
             reasoning_summary=["这是测试执行摘要。"],
             session_state={
                 "agent_version": "lesson-02-chat-service",
@@ -102,6 +113,18 @@ def test_chat_returns_stable_response_contract(
             "confidence": 0.95,
             "matched_keywords": ["你好"],
             "explanation": "测试意图结果。",
+        },
+        "cost_summary": {
+            "prompt_tokens": 100,
+            "answer_tokens": 20,
+            "total_tokens": 120,
+            "token_source": "model_usage",
+            "usage_details": {},
+            "estimated_input_cost_cny": 0.0001,
+            "estimated_output_cost_cny": 0.00004,
+            "estimated_total_cost_cny": 0.00014,
+            "context_chars": 320,
+            "pricing_note": "测试数据",
         },
         "reasoning_summary": ["这是测试执行摘要。"],
         "session_state": {

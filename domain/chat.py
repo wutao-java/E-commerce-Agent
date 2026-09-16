@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from .cost import CostSummary
 from .intent import Intent, IntentResult
 
 
@@ -24,11 +25,12 @@ class ChatCommand(BaseModel):
 
 
 class ChatResult(BaseModel):
-    """保存回答、意图和本轮状态，由接口层转换为响应。"""
+    """保存回答、意图、成本摘要和本轮状态，供接口层转换。"""
 
     session_id: str
     answer: str
     intent: Intent
     intent_result: IntentResult
+    cost_summary: CostSummary
     reasoning_summary: list[str]
     session_state: dict[str, Any]

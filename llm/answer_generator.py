@@ -7,15 +7,19 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from cost.observer import parse_model_usage
+from domain import TokenUsage
+
 from .client import call_chat_model, extract_assistant_message
 
 AnswerModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
 
 
 class GroundedAnswerResult(BaseModel):
-    """记录实际返回的回答、模型使用情况和兜底原因。"""
+    """记录回答、模型用量、实际调用情况和兜底原因。"""
 
     answer: str
+    usage: TokenUsage | None = None
     used_model: bool = False
     fallback_reason: str | None = None
 
@@ -40,5 +44,7 @@ def compose_grounded_answer(
 
     return GroundedAnswerResult(
         answer=answer,
+        # 模型客户端已返回完整响应，这里只提取可选 usage，不改变调用协议。
+        usage=parse_model_usage(model_response),
         used_model=True,
     )

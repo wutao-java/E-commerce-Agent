@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from domain import Intent, IntentResult
+from domain import CostSummary, Intent, IntentResult
 
 # 请求可以携带展示偏好，但当前路由尚未用它改变 Agent 的返回内容。
 ReasoningView = Literal["default", "off", "summary", "teaching"]
@@ -56,11 +56,12 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """暴露回答、结构化意图与本轮处理状态的 HTTP 响应。"""
+    """暴露回答、结构化意图、成本摘要与本轮处理状态。"""
 
     session_id: str
     answer: str
     intent: Intent
     intent_result: IntentResult
+    cost_summary: CostSummary
     reasoning_summary: list[str]
     session_state: dict[str, Any]
