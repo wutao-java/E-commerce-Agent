@@ -2,11 +2,14 @@
 
 from .chat import ChatCommand, ChatResult
 from .intent import Intent, IntentResult, IntentSource
+from .prompt import ContextConflict, PolicyDocument
 
 __all__ = [
     "ChatCommand",
     "ChatResult",
+    "ContextConflict",
     "Intent",
     "IntentResult",
     "IntentSource",
+    "PolicyDocument",
 ]

@@ -16,8 +16,8 @@ def build_fallback_answer(intent_result: IntentResult) -> str:
     if intent_result.intent == "refund_request":
         return (
             "我已经先把这条消息识别为退款或售后类问题。"
-            "当前版本还没有接入售后规则和订单状态，"
-            "不能直接判断是否可退。"
+            "退款、退货需要结合订单状态、商品类目和售后规则确认；"
+            "当前还没有接入订单和售后工具，不能直接判断是否可退。"
         )
 
     if intent_result.intent == "order_query":
@@ -29,7 +29,8 @@ def build_fallback_answer(intent_result: IntentResult) -> str:
     if intent_result.intent == "promotion_consult":
         return (
             "我已经先把这条消息识别为优惠活动咨询。"
-            "当前版本还没有接入活动规则，不能承诺具体优惠。"
+            "具体优惠需要以当前活动规则和结算页实时展示为准，"
+            "不能口头承诺一定可以叠加。"
         )
 
     if intent_result.intent == "product_consult":

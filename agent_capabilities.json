@@ -1,14 +1,14 @@
 {
   "schema_version": "agent_capabilities_v1",
   "lesson": {
-    "id": "lesson-04-intent-structured-output",
-    "number": 4,
-    "title": "结构化输出与意图识别",
-    "summary": "当前版本让 /chat 返回结构化意图，并基于意图生成受约束的客服回复。"
+    "id": "lesson-05-prompt-boundary",
+    "number": 5,
+    "title": "Prompt 边界与长上下文冲突",
+    "summary": "当前版本用 system prompt 管住客服身份、事实优先级和回答边界，并把当前与历史规则全量注入 Prompt。"
   },
   "agent": {
     "name": "小哲电商客服 Agent",
-    "version": "lesson-04-intent-structured-output"
+    "version": "lesson-05-prompt-boundary-full-context"
   },
   "endpoints": {
     "health": true,
@@ -37,7 +37,7 @@
   },
   "disabled_reasons": {
     "reasoning_content": "当前版本只返回公开执行摘要，不公开模型隐藏推理。",
-    "rag_citations": "当前版本尚未接入 RAG。",
+    "rag_citations": "当前版本是全量 Prompt 注入，尚未接入 RAG 和引用。",
     "tool_calls": "当前版本尚未接入业务工具。",
     "workflow": "当前版本尚未接入售后工作流。",
     "human_approval": "当前版本尚未接入人工审批。",
@@ -45,6 +45,6 @@
     "hooks": "当前版本尚未接入 Hooks。",
     "trace": "当前版本尚未接入调用轨迹。",
     "evaluation": "当前版本尚未接入回归评测。",
-    "cost_summary": "当前版本尚未接入成本统计。"
+    "cost_summary": "当前只粗略估算 Prompt token，尚未形成成本统计。"
   }
 }
