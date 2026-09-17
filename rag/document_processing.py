@@ -1,4 +1,4 @@
-"""Parse knowledge sources into ordered, attributable content blocks."""
+"""将知识文档解析为保持阅读顺序和来源位置的结构化内容块。"""
 
 from __future__ import annotations
 
@@ -16,10 +16,12 @@ from pydantic import BaseModel
 
 
 class DocumentProcessingError(ValueError):
-    """The source cannot be safely prepared for knowledge ingestion."""
+    """文档无法可靠解析，不能直接进入知识库。"""
 
 
 class DocumentBlock(BaseModel):
+    """一个标题、段落或表格；页码仅记录解析器实际提供的位置。"""
+
     kind: Literal["heading", "paragraph", "list_item", "table", "caption", "code"]
     text: str
     heading_path: list[str]
@@ -28,6 +30,8 @@ class DocumentBlock(BaseModel):
 
 
 class ParsedDocument(BaseModel):
+    """原文哈希、解析器版本与有序内容块组成后续分块的输入。"""
+
     source_name: str
     source_format: Literal["md", "docx", "pdf"]
     sha256: str
@@ -46,6 +50,8 @@ _FORMATS = {
 
 @lru_cache(maxsize=1)
 def _converter() -> DocumentConverter:
+    """复用转换器；PDF 同时启用 OCR 和表格结构识别。"""
+
     pdf_options = PdfPipelineOptions(
         do_ocr=True,
         do_table_structure=True,
@@ -58,7 +64,7 @@ def _converter() -> DocumentConverter:
 
 
 def parse_document(path: str | Path) -> ParsedDocument:
-    """Read one source file without chunking it or changing the original."""
+    """读取一份原文件，不切片、不修改文件内容。"""
 
     source = Path(path)
     if source.suffix.lower() == ".doc":
@@ -71,6 +77,7 @@ def parse_document(path: str | Path) -> ParsedDocument:
     if source.stat().st_size == 0:
         raise DocumentProcessingError(f"Document is empty: {source}")
 
+    # 哈希用于区分同一文档的不同内容版本，与文件名无关。
     with source.open("rb") as stream:
         sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
 
@@ -88,12 +95,15 @@ def parse_document(path: str | Path) -> ParsedDocument:
     blocks: list[DocumentBlock] = []
     warnings: list[str] = []
 
+    # 按解析器恢复的阅读顺序遍历，同时追踪当前标题层级。
     for item, _depth in document.iterate_items():
         if isinstance(item, PictureItem):
+            # 没有文字说明的图片可能包含未提取的业务规则，交由人工复核。
             if not item.caption_text(document).strip():
                 warnings.append("Image without a text caption requires visual review")
             continue
         if isinstance(item, TableItem):
+            # 表格整体保留为 Markdown，后续不会按单元格暴力拆分。
             text = item.export_to_markdown(document).strip()
             kind = "table"
         else:
@@ -102,6 +112,7 @@ def parse_document(path: str | Path) -> ParsedDocument:
             if isinstance(item, (TitleItem, SectionHeaderItem)):
                 kind = "heading"
                 level = 0 if isinstance(item, TitleItem) else item.level
+                # 进入同级或更高层标题时，清除旧的下级章节。
                 headings = {key: value for key, value in headings.items() if key < level}
                 headings[level] = text
             elif item.label.value in ("list_item", "caption", "code"):
@@ -109,6 +120,7 @@ def parse_document(path: str | Path) -> ParsedDocument:
         if not text:
             continue
 
+        # 只读取真实来源页码，不为 Markdown / Word 推算虚构页码。
         pages = sorted({provenance.page_no for provenance in item.prov})
         if input_format == InputFormat.PDF and not pages:
             warnings.append("Text without PDF page provenance requires review")
@@ -131,5 +143,6 @@ def parse_document(path: str | Path) -> ParsedDocument:
         parser_version=version("docling"),
         page_count=len(document.pages) if input_format == InputFormat.PDF else None,
         blocks=blocks,
+        # 同类风险只提示一次，避免重复图片或段落产生大量相同告警。
         warnings=list(dict.fromkeys(warnings)),
     )

@@ -18,7 +18,7 @@
 
 **三、模型与混合检索**
 
-优先验证百炼的 `qwen3.7-text-embedding-flash`，默认从 1024 维开始。[百炼文档](https://help.aliyun.com/zh/model-studio/embedding)说明它支持同次输出 `dense&sparse`；北京地域文档标价为 0.000125 元/千输入 Token，双路输出不额外增加该次生成费用。稀疏输出需要 DashScope SDK/API，实施前必须用实际账号确认返回结构，不能直接复用只取稠密向量的 OpenAI 兼容调用。
+当前百炼[同步接口文档](https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api)未将 `qwen3.7-text-embedding-flash` 列为支持 `dense&sparse` 的模型。实现默认使用支持双路输出的 `qwen3.7-text-embedding`（1024 维；北京地域文档价约 0.0005 元/千输入 Token）。如果优先使用更便宜的 flash，需要另建 Milvus BM25 稀疏路径并重建索引；不能把 flash 当成会返回模型稀疏向量的双路模型。上线前须用实际账号验证返回结构。
 
 BGE-M3 保留为对照方案：它能生成稠密和 *learned sparse* 向量，但**learned sparse 不等于 BM25**；若要求通过百炼使用，还须确认具体托管接口确实暴露双路结果。第一期先做“稠密 + 模型稀疏”两路，不预先叠加第三路 BM25。文档向量和查询向量使用同一模型配置，并分别按 `document`、`query` 类型生成。
 
@@ -30,7 +30,7 @@ BGE-M3 保留为对照方案：它能生成稠密和 *learned sparse* 向量，�
 | MySQL | 管理稳定的 `doc_id`、不可变的 `doc_version_id`、原文件哈希、审核发布状态、生效时间、解析和模型配置。 |
 | Milvus 子块集合 | 存 `chunk_id`、`kb_id`、`doc_id`、`doc_version_id`、`parent_id`、子块序号、`child_text`、`parent_text`、稠密/稀疏向量，以及主题、适用范围、生效时间、文件名、标题路径和可用的页码范围。 |
 
-`doc_id` 表示同一份知识，`doc_version_id` 表示某次不可变内容，`release_id` 表示对外服务的索引发布批次。**上传新版本不等于立即替换旧规则**：先解析入库、完成质量检查，再发布；普通问题只检索当前有效版本，明确问历史时才进入历史检索。初期知识库较小时，可构建完整的新发布集合并切换 Milvus 别名，便于一致性切换和回滚；不依赖逐条更新 `is_latest` 来模拟原子发布。更换 embedding 模型也必须重建索引，不能把两种模型的向量混在同一检索空间。
+`doc_id` 表示同一份知识，`doc_version_id` 表示某次不可变内容，`release_id` 表示对外服务的文档版本组合。**上传新版本不等于立即替换旧规则**：每个知识库在一个集合中增量写入新版本，完成质量检查后由 MySQL 原子切换生效批次；普通检索必须按该批次的文档版本过滤，历史问题可指定历史批次。旧向量保留以支持回滚，不逐条更新 `is_latest`。更换 embedding 模型仍须重建整个索引，不能把两种模型的向量混在同一检索空间。
 
 **五、在线回答与验收**
 

@@ -1,4 +1,4 @@
-"""Verify that source documents retain structure and provenance for later chunking."""
+"""验证三类文档解析后仍保留分块所需结构和来源定位。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from rag.document_processing import DocumentProcessingError, parse_document
 
 
 def test_markdown_preserves_heading_order_and_table(tmp_path: Path) -> None:
+    """Markdown 保留标题路径和完整表格，不生成虚构页码。"""
+
     source = tmp_path / "policy.md"
     source.write_text(
         "# Returns\n\n## Seven days\n\nKeep the packaging.\n\n"
@@ -39,6 +41,8 @@ def test_markdown_preserves_heading_order_and_table(tmp_path: Path) -> None:
 
 
 def test_docx_preserves_table_and_does_not_invent_page_numbers(tmp_path: Path) -> None:
+    """Word 保留段落与表格，页码未知时保持为空。"""
+
     source = tmp_path / "policy.docx"
     document = Document()
     document.add_heading("Returns", level=1)
@@ -68,6 +72,8 @@ def test_docx_preserves_table_and_does_not_invent_page_numbers(tmp_path: Path) -
 
 
 def test_pdf_preserves_physical_page_numbers(tmp_path: Path) -> None:
+    """可提取文本的 PDF 保留每段文字的真实物理页码。"""
+
     source = tmp_path / "policy.pdf"
     document = canvas.Canvas(str(source))
     document.drawString(80, 720, "Returns require packaging.")
@@ -83,6 +89,8 @@ def test_pdf_preserves_physical_page_numbers(tmp_path: Path) -> None:
 
 
 def test_scanned_pdf_is_ocr_readable(tmp_path: Path) -> None:
+    """扫描件经 OCR 后仍能关联原 PDF 页码。"""
+
     source = tmp_path / "scanned.pdf"
     image = Image.new("RGB", (1800, 500), "white")
     ImageDraw.Draw(image).text(
@@ -99,6 +107,8 @@ def test_scanned_pdf_is_ocr_readable(tmp_path: Path) -> None:
 
 
 def test_mixed_pdf_keeps_native_and_image_text(tmp_path: Path) -> None:
+    """图文混排页同时提取原生文本和图片中的文字。"""
+
     source = tmp_path / "mixed.pdf"
     image = Image.new("RGB", (1800, 500), "white")
     ImageDraw.Draw(image).text(
@@ -116,6 +126,8 @@ def test_mixed_pdf_keeps_native_and_image_text(tmp_path: Path) -> None:
 
 
 def test_two_column_pdf_preserves_reading_order(tmp_path: Path) -> None:
+    """双列 PDF 先读完左列，再按阅读顺序进入右列。"""
+
     source = tmp_path / "columns.pdf"
     document = canvas.Canvas(str(source))
     for text, y in [
@@ -134,6 +146,8 @@ def test_two_column_pdf_preserves_reading_order(tmp_path: Path) -> None:
 
 
 def test_pdf_table_stays_one_structured_block(tmp_path: Path) -> None:
+    """PDF 表格作为完整结构块交给后续分块处理。"""
+
     source = tmp_path / "table.pdf"
     document = canvas.Canvas(str(source))
     table = Table([["Condition", "Result"], ["Opened", "Review"]], colWidths=[200, 200])
@@ -151,6 +165,8 @@ def test_pdf_table_stays_one_structured_block(tmp_path: Path) -> None:
 
 
 def test_empty_or_unsupported_source_is_rejected(tmp_path: Path) -> None:
+    """空文件与旧版 .doc 不作为可解析知识来源。"""
+
     empty = tmp_path / "empty.md"
     empty.write_text("", encoding="utf-8")
     legacy = tmp_path / "legacy.doc"
