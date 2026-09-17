@@ -8,6 +8,7 @@ from typing import Protocol
 from fastapi import APIRouter, HTTPException, status
 
 from config.capabilities import load_agent_capabilities
+from config.rag import get_rag_settings
 from domain import ChatCommand, ChatResult
 from web.schema import ChatRequest, ChatResponse
 
@@ -30,11 +31,12 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
     @router.get("/capabilities")
     def capabilities() -> dict:
         """返回当前 Agent 能力边界。"""
+        capabilities = load_agent_capabilities().copy()
+        capabilities["features"] = {**capabilities["features"], "rag_citations": get_rag_settings().enabled}
+        return capabilities
 
-        return load_agent_capabilities()
 
-
-    @router.post("/chat", response_model=ChatResponse)
+    @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
     def chat(request: ChatRequest) -> ChatResponse:
         """将 HTTP 请求转换为内部命令，再把处理结果校验为响应。"""
         try:

@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain import CostSummary, Intent, IntentResult
+from domain.rag import Citation
 
 # 请求可以携带展示偏好，但当前路由尚未用它改变 Agent 的返回内容。
 ReasoningView = Literal["default", "off", "summary", "teaching"]
@@ -65,3 +66,4 @@ class ChatResponse(BaseModel):
     cost_summary: CostSummary
     reasoning_summary: list[str]
     session_state: dict[str, Any]
+    citations: list[Citation] | None = None

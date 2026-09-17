@@ -16,7 +16,40 @@ E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当
 - 在应用关闭时释放已创建的数据库连接池
 - 使用 Pytest 覆盖模型客户端、聊天契约、意图识别和依赖边界
 
-> 当前 `/chat` 尚未接入商品、订单、RAG 检索、工具调用和售后工作流，不能执行退款、赔偿或其他业务动作。
+> 默认 `/chat` 尚未启用 RAG，也未接入商品、订单、工具调用和售后工作流，不能执行退款、赔偿或其他业务动作。课程 RAG 仅供隔离练习。
+
+## 课程 RAG 沙箱（第 08–16 课）
+
+默认关闭，不影响当前 `/chat` 或 Spring Boot 商城。课程原文位于 `knowledge/course/`，向量仅写入独立的 `course_rag_<内容指纹>` Milvus collection。文档中的历史活动不代表今天有效的商城政策；正式业务知识与实时订单、库存、物流等信息均未接入。
+
+启用前需要可访问的 Milvus Standalone（默认 `http://127.0.0.1:19530`）和支持 OpenAI-compatible `/embeddings` 的独立 embedding Key。没有 Milvus 时可运行 `docker compose -f docker-compose.course-milvus.yml up -d`；若本机 19530 端口已有 Milvus，则直接复用，避免端口冲突。安装依赖后，在本机 `.env` 中设置：
+
+```dotenv
+COURSE_RAG_EMBEDDING_API_KEY=课程embedding服务的Key
+COURSE_RAG_ENABLED=true
+SERVER_HOST=127.0.0.1
+SERVER_PORT=8001
+```
+
+如需复现课程中的 2026 春季案例，可以**只在隔离环境**设置 `COURSE_RAG_AS_OF_DATE=2026-03-15`；留空按当天日期过滤过期活动。回答模型仍由原有 `AGENT_OPENAI_*` 配置控制。不同服务商时，分别设置 `COURSE_RAG_EMBEDDING_BASE_URL` 与 `AGENT_OPENAI_BASE_URL`，不可混用密钥。
+
+先执行核心构建，再启动隔离端口的服务：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m rag.commands rebuild
+.\.venv\Scripts\python.exe main.py
+```
+
+索引按文档内容、切片参数和 embedding 模型生成版本；修改这些项目后再次执行 `rebuild`，并**重启 Agent 进程**以读取新版本。不会删除旧 collection；可在确认不再使用之后另行清理。首次聊天会校验索引完整性，缺少索引或 Milvus/embedding 服务不可用时只返回保守话术，不会用关键词命中冒充向量检索。
+
+```powershell
+$body = @{ session_id = 'course-08-16'; runtime_user_id = 'course-user'; user_message = '金卡会员买降噪耳机，会员价还能叠加优惠券吗？' } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8001/chat -ContentType 'application/json' -Body $body
+.\.venv\Scripts\python.exe -m rag.commands evaluate
+```
+
+`citations` 来自实际知识命中；`session_state.rag` 展示改写、两路召回、索引版本、置信度与检索缓存状态。仅缓存稳定知识的命中 ID/片段，最多 256 项、有效 5 分钟，不缓存最终回答或实时业务数据。商业 reranker 可选配置 `COURSE_RAG_RERANK_BASE_URL`、`COURSE_RAG_RERANK_MODEL`、`COURSE_RAG_RERANK_API_KEY`；不配置时沿用课程轻量重排。质量检查仅通过 `evaluate` 离线运行。
 
 ## 技术栈
 

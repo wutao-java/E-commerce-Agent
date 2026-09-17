@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .cost import CostSummary
 from .intent import Intent, IntentResult
+from .rag import Citation
 
 
 class ChatCommand(BaseModel):
@@ -34,3 +35,4 @@ class ChatResult(BaseModel):
     cost_summary: CostSummary
     reasoning_summary: list[str]
     session_state: dict[str, Any]
+    citations: list[Citation] | None = None

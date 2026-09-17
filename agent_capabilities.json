@@ -1,14 +1,14 @@
 {
   "schema_version": "agent_capabilities_v1",
   "lesson": {
-    "id": "lesson-07-token-cost-observation",
-    "number": 7,
-    "title": "Token 成本观察",
-    "summary": "在 Prompt Registry 基础上返回回答模型 cost_summary，优先使用 usage，缺失时估算。"
+    "id": "lesson-16-course-rag-milvus",
+    "number": 16,
+    "title": "课程 RAG 与 Milvus",
+    "summary": "课程知识检索需显式开启和发布索引；默认保留原有聊天流程。"
   },
   "agent": {
     "name": "小哲电商客服 Agent",
-    "version": "lesson-07-token-cost-observation"
+    "version": "lesson-16-course-rag-milvus"
   },
   "endpoints": {
     "health": true,
@@ -37,7 +37,7 @@
   },
   "disabled_reasons": {
     "reasoning_content": "当前版本只返回公开执行摘要，不公开模型隐藏推理。",
-    "rag_citations": "当前版本只是 Prompt Registry，尚未接入 RAG 和引用。",
+    "rag_citations": "课程 RAG 默认关闭；配置 COURSE_RAG_ENABLED=true 并发布 Milvus 索引后可返回引用。",
     "tool_calls": "当前版本尚未接入业务工具。",
     "workflow": "当前版本尚未接入售后工作流。",
     "human_approval": "当前版本尚未接入人工审批。",
