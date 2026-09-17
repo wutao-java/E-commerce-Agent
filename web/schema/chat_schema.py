@@ -54,6 +54,7 @@ class ChatRequest(BaseModel):
         default=None,
         description="页面等运行时上下文",
     )
+    runtime_account_id: int | None = None
 
 
 class ChatResponse(BaseModel):

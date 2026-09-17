@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Protocol
-
+import os
+import secrets
+from fastapi import Header
 from fastapi import APIRouter, HTTPException, status
-
 from config.capabilities import load_agent_capabilities
 from config.rag import get_rag_settings
 from domain import ChatCommand, ChatResult
@@ -35,10 +36,16 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
         capabilities["features"] = {**capabilities["features"], "rag_citations": get_rag_settings().enabled}
         return capabilities
 
-
     @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
-    def chat(request: ChatRequest) -> ChatResponse:
+    def chat(request: ChatRequest, x_agent_service_token: str | None = Header(default=None)) -> ChatResponse:
         """将 HTTP 请求转换为内部命令，再把处理结果校验为响应。"""
+
+        expected = os.getenv("AGENT_SERVICE_TOKEN", "")
+        if not expected:
+               raise HTTPException(status_code=503, detail="Agent 网关令牌未配置")
+        if not x_agent_service_token or not secrets.compare_digest(
+            x_agent_service_token, expected):
+            raise HTTPException(status_code=401, detail="未经授权的 Agent 调用")
         try:
             # 当前只转交 Agent 所需字段；展示级别和 debug 尚未参与处理。
             command = ChatCommand(
@@ -47,6 +54,7 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
                 runtime_nickname=request.runtime_nickname,
                 runtime_member_level=request.runtime_member_level,
                 runtime_risk_level=request.runtime_risk_level,
+                runtime_account_id=request.runtime_account_id,
                 user_message=request.user_message,
                 runtime_context=request.runtime_context,
             )

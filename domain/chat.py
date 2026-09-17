@@ -23,6 +23,7 @@ class ChatCommand(BaseModel):
     runtime_risk_level: str | None = None
     user_message: str
     runtime_context: dict[str, Any] | None = None
+    runtime_account_id: int | None = None
 
 
 class ChatResult(BaseModel):
