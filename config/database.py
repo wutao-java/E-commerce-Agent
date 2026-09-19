@@ -6,6 +6,8 @@ from __future__ import annotations
 # 导入异步迭代器类型和单实例缓存装饰器。
 from collections.abc import AsyncIterator
 from functools import lru_cache
+import logging
+import time
 
 # 导入配置模型与 SQLAlchemy 异步数据库组件。
 from pydantic import BaseModel, Field
@@ -18,6 +20,9 @@ from sqlalchemy.ext.asyncio import (
 
 # 导入统一的命名配置段读取接口。
 from config import get_section
+
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseSettings(BaseModel):
@@ -62,7 +67,7 @@ def get_engine() -> AsyncEngine:
     # 延迟读取数据库配置，避免未使用数据库时创建资源。
     settings = get_database_settings()
     # 使用连接池参数构建异步引擎，并在取连接前检测连接有效性。
-    return create_async_engine(
+    engine = create_async_engine(
         settings.url,
         pool_size=settings.pool_size,
         max_overflow=settings.max_overflow,
@@ -71,6 +76,13 @@ def get_engine() -> AsyncEngine:
         pool_pre_ping=True,
         echo=settings.echo,
     )
+    logger.info(
+        "Database engine created pool_size=%d max_overflow=%d pool_timeout=%d",
+        settings.pool_size,
+        settings.max_overflow,
+        settings.pool_timeout,
+    )
+    return engine
 
 
 @lru_cache(maxsize=1)
@@ -104,8 +116,14 @@ async def dispose_engine() -> None:
     """
     # 仅在引擎已经创建时释放资源，避免关闭流程反向初始化引擎。
     if get_engine.cache_info().currsize:
+        started_at = time.perf_counter()
+        logger.info("Database engine disposal started")
         # 释放连接池持有的全部数据库连接。
         await get_engine().dispose()
+        logger.info(
+            "Database engine disposal completed duration_ms=%.2f",
+            (time.perf_counter() - started_at) * 1000,
+        )
     # 清除会话工厂缓存，防止继续引用已释放引擎。
     get_session_factory.cache_clear()
     # 清除引擎缓存，允许后续按最新配置重新创建。

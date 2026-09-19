@@ -37,3 +37,9 @@ def configure_logging(level: str = "INFO", log_file: str | None = None) -> None:
         handlers=handlers,
         force=True,
     )
+    logging.getLogger(__name__).info(
+        "Logging configured level=%s handler_count=%d file_logging=%s",
+        level.upper(),
+        len(handlers),
+        bool(log_file),
+    )

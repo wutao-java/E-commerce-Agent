@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 import httpx
 
 from config.rag import RagSettings
 from domain.rag import KnowledgeHit, RetrievalPlan
+
+
+logger = logging.getLogger(__name__)
 
 
 def rerank_lightweight(plan: RetrievalPlan, candidates: list[KnowledgeHit]) -> list[KnowledgeHit]:
@@ -50,10 +56,24 @@ def rerank_candidates(plan: RetrievalPlan, candidates: list[KnowledgeHit], setti
         按相关性降序排列的候选列表。
     """
     if not candidates or not settings.rerank_model or not settings.rerank_base_url:
+        logger.debug(
+            "Reranker using local mode candidate_count=%d reason=not_configured",
+            len(candidates),
+        )
         return rerank_lightweight(plan, candidates)
     key = settings.rerank_api_key.get_secret_value()
     if not key:
+        logger.warning(
+            "Reranker using local mode candidate_count=%d reason=missing_api_key",
+            len(candidates),
+        )
         return rerank_lightweight(plan, candidates)
+    started_at = time.perf_counter()
+    logger.info(
+        "Reranker request started model=%s candidate_count=%d",
+        settings.rerank_model,
+        len(candidates),
+    )
     try:
         response = httpx.post(
             f"{settings.rerank_base_url.rstrip('/')}/rerank",
@@ -79,8 +99,29 @@ def rerank_candidates(plan: RetrievalPlan, candidates: list[KnowledgeHit], setti
                 "score": score, "rerank_reasons": ["商业 reranker 精排"],
             }))
         if ranked:
-            return sorted(ranked, key=lambda hit: hit.score, reverse=True)
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            result = sorted(ranked, key=lambda hit: hit.score, reverse=True)
+            logger.info(
+                "Reranker request completed model=%s result_count=%d duration_ms=%.2f",
+                settings.rerank_model,
+                len(result),
+                (time.perf_counter() - started_at) * 1000,
+            )
+            return result
+        logger.warning(
+            "Reranker using local mode candidate_count=%d reason=empty_result duration_ms=%.2f",
+            len(candidates),
+            (time.perf_counter() - started_at) * 1000,
+        )
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         # 精排是可选增强能力，失败时保留本地确定性排序作为降级路径。
-        pass
+        error_response = getattr(exc, "response", None)
+        logger.warning(
+            "Reranker using local mode candidate_count=%d reason=request_failed "
+            "status_code=%s error_type=%s duration_ms=%.2f",
+            len(candidates),
+            getattr(error_response, "status_code", None),
+            type(exc).__name__,
+            (time.perf_counter() - started_at) * 1000,
+            exc_info=True,
+        )
     return rerank_lightweight(plan, candidates)

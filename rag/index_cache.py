@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from functools import lru_cache
 
 from pydantic import BaseModel
@@ -11,6 +12,9 @@ from pydantic import BaseModel
 from config.rag import get_rag_settings
 from domain.rag import KnowledgeChunk
 from rag.knowledge_base import build_knowledge_chunks, load_source_documents
+
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeIndex(BaseModel):
@@ -38,7 +42,8 @@ def get_knowledge_index() -> KnowledgeIndex:
         RuntimeError: 课程知识目录中没有可用片段。
     """
     settings = get_rag_settings()
-    chunks = build_knowledge_chunks(load_source_documents(), settings.chunk_size, settings.chunk_overlap)
+    documents = load_source_documents()
+    chunks = build_knowledge_chunks(documents, settings.chunk_size, settings.chunk_overlap)
     if not chunks:
         raise RuntimeError("课程知识目录为空。")
     # embedding 或切片配置变化时生成新版本，避免复用不兼容的 Milvus collection。
@@ -54,11 +59,19 @@ def get_knowledge_index() -> KnowledgeIndex:
     for chunk in chunks:
         for keyword in chunk.keywords:
             inverted.setdefault(keyword.lower(), []).append(chunk.chunk_id)
-    return KnowledgeIndex(
+    index = KnowledgeIndex(
         version=digest,
         chunks_by_id={chunk.chunk_id: chunk for chunk in chunks},
         inverted_index=inverted,
     )
+    logger.info(
+        "Knowledge index built index_version=%s document_count=%d chunk_count=%d keyword_count=%d",
+        index.version,
+        len(documents),
+        len(index.chunks_by_id),
+        len(index.inverted_index),
+    )
+    return index
 
 
 def rebuild_knowledge_index() -> KnowledgeIndex:

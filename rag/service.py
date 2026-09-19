@@ -27,6 +27,26 @@ from rag.retrieval import keyword_retrieve, merge_hybrid_hits, vector_retrieve
 logger = logging.getLogger(__name__)
 
 
+def _log_retrieval_completed(
+    session_id: str,
+    debug: dict[str, Any],
+    hit_count: int,
+    started_at: float,
+) -> None:
+    """记录不包含查询正文和知识正文的检索结果摘要。"""
+
+    logger.info(
+        "RAG retrieval completed session_id=%s scene=%s hit_count=%d "
+        "cache_hit=%s fallback_reason=%s duration_ms=%.2f",
+        session_id,
+        debug["scene"],
+        hit_count,
+        debug["cache_hit"],
+        debug.get("fallback_reason"),
+        (time.perf_counter() - started_at) * 1000,
+    )
+
+
 class CourseRagService:
     """编排课程知识索引校验、混合召回、重排和结果缓存。"""
 
@@ -62,6 +82,7 @@ class CourseRagService:
         Raises:
             RuntimeError: Milvus 索引或 embedding 服务不可用。
         """
+        started_at = time.perf_counter()
         index = get_knowledge_index()
         chunks = list(index.chunks_by_id.values())
         plan = pre_retrieval_plan(command, intent, chunks)
@@ -72,9 +93,19 @@ class CourseRagService:
             "scene": plan.scene, "allowed_topics": plan.allowed_topics,
             "cache_hit": False, "cache_scope": "retrieval_hits_only",
         }
+        logger.info(
+            "RAG retrieval started session_id=%s intent=%s scene=%s "
+            "index_version=%s realtime=%s",
+            command.session_id,
+            intent,
+            plan.scene,
+            index.version,
+            plan.realtime,
+        )
         # 实时业务查询和闲聊不应使用静态课程知识作答。
         if plan.realtime or intent == "general_chat":
             debug["fallback_reason"] = "realtime_query" if plan.realtime else "general_chat"
+            _log_retrieval_completed(command.session_id, debug, 0, started_at)
             return plan, [], debug
 
         historical = asks_for_history(plan.original_query)
@@ -85,6 +116,7 @@ class CourseRagService:
         }
         if not allowed:
             debug["fallback_reason"] = "no_available_knowledge"
+            _log_retrieval_completed(command.session_id, debug, 0, started_at)
             return plan, [], debug
 
         key = self._cache_key(index.version, plan)
@@ -96,6 +128,12 @@ class CourseRagService:
                     self._cache.move_to_end(key)
                     debug["cache_hit"] = True
                     debug["matched_chunk_ids"] = [hit.chunk.chunk_id for hit in cached[1]]
+                    _log_retrieval_completed(
+                        command.session_id,
+                        debug,
+                        len(cached[1]),
+                        started_at,
+                    )
                     return plan, cached[1], debug
                 self._cache.pop(key, None)
 
@@ -105,8 +143,25 @@ class CourseRagService:
                 self.store.verify(index.version, set(index.chunks_by_id))
                 self._verified_version = index.version
             vector_hits = vector_retrieve(plan, index.version, allowed, self.embedding, self.store, self.settings)
+        except RuntimeError as exc:
+            logger.warning(
+                "RAG retrieval failed session_id=%s scene=%s error_type=%s duration_ms=%.2f",
+                command.session_id,
+                plan.scene,
+                type(exc).__name__,
+                (time.perf_counter() - started_at) * 1000,
+                exc_info=True,
+            )
+            raise
         except (MilvusException, ValueError) as exc:
-            logger.warning("Course RAG retrieval unavailable: %s", exc)
+            logger.warning(
+                "RAG retrieval failed session_id=%s scene=%s error_type=%s duration_ms=%.2f",
+                command.session_id,
+                plan.scene,
+                type(exc).__name__,
+                (time.perf_counter() - started_at) * 1000,
+                exc_info=True,
+            )
             raise RuntimeError("课程 Milvus 或 embedding 检索不可用。") from exc
         keyword_hits = keyword_retrieve(plan, allowed, index.inverted_index, self.settings.candidate_k)
         candidates = merge_hybrid_hits(vector_hits, keyword_hits)
@@ -126,6 +181,12 @@ class CourseRagService:
                 self._cache.move_to_end(key)
                 if len(self._cache) > 256:
                     self._cache.popitem(last=False)
+        _log_retrieval_completed(
+            command.session_id,
+            debug,
+            len(reliable),
+            started_at,
+        )
         return plan, reliable, debug
 
     def publish(self) -> tuple[str, int]:
@@ -134,11 +195,35 @@ class CourseRagService:
         Returns:
             已发布的 collection 名称和知识片段数量。
         """
+        started_at = time.perf_counter()
         index = get_knowledge_index()
         chunks = list(index.chunks_by_id.values())
-        vectors = self.embedding.embed_many([embedding_text(chunk) for chunk in chunks])
-        name = self.store.publish(index.version, chunks, vectors)
+        logger.info(
+            "RAG index publish started index_version=%s chunk_count=%d",
+            index.version,
+            len(chunks),
+        )
+        try:
+            vectors = self.embedding.embed_many([embedding_text(chunk) for chunk in chunks])
+            name = self.store.publish(index.version, chunks, vectors)
+        except Exception as exc:
+            logger.error(
+                "RAG index publish failed index_version=%s error_type=%s duration_ms=%.2f",
+                index.version,
+                type(exc).__name__,
+                (time.perf_counter() - started_at) * 1000,
+                exc_info=True,
+            )
+            raise
         self._verified_version = index.version
         with self._lock:
             self._cache.clear()
+        logger.info(
+            "RAG index publish completed index_version=%s collection=%s "
+            "chunk_count=%d duration_ms=%.2f",
+            index.version,
+            name,
+            len(chunks),
+            (time.perf_counter() - started_at) * 1000,
+        )
         return name, len(chunks)

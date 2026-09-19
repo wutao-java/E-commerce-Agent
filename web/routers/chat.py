@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
+import time
 from typing import Annotated, Any, Protocol
 
 import jwt
@@ -13,6 +15,9 @@ from config.rag import get_rag_settings
 from domain import ChatCommand, ChatResult
 from security.jwt import decode_token, get_jwt_settings
 from web.schema import ChatRequest, ChatResponse
+
+
+logger = logging.getLogger(__name__)
 
 
 class ChatAgent(Protocol):
@@ -35,6 +40,7 @@ def require_agent_principal(
     """验证内部 Bearer JWT，并返回可信声明。"""
 
     if credentials is None or credentials.scheme.lower() != "bearer":
+        logger.warning("Agent authentication rejected reason=missing_bearer")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="缺少 Agent Bearer 凭证",
@@ -43,11 +49,20 @@ def require_agent_principal(
     try:
         claims = decode_token(credentials.credentials)
     except RuntimeError as exc:
+        logger.error(
+            "Agent authentication unavailable error_type=%s",
+            type(exc).__name__,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Agent JWT 公钥未配置",
         ) from exc
     except jwt.PyJWTError as exc:
+        logger.warning(
+            "Agent authentication rejected reason=invalid_token error_type=%s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的 Agent Bearer 凭证",
@@ -57,6 +72,7 @@ def require_agent_principal(
     scopes = claims.get("scope", "")
     granted = set(scopes if isinstance(scopes, list) else str(scopes).split())
     if get_jwt_settings().required_scope not in granted:
+        logger.warning("Agent authentication rejected reason=missing_scope")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Agent Bearer 凭证权限不足",
@@ -64,11 +80,13 @@ def require_agent_principal(
     try:
         int(claims["sub"])
     except (KeyError, TypeError, ValueError) as exc:
+        logger.warning("Agent authentication rejected reason=invalid_subject")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Agent Bearer 凭证缺少有效用户身份",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+    logger.info("Agent authentication succeeded")
     return claims
 
 
@@ -91,6 +109,12 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
     ) -> ChatResponse:
         """将 HTTP 请求转换为内部命令，再把处理结果校验为响应。"""
 
+        started_at = time.perf_counter()
+        logger.info(
+            "Chat request received session_id=%s message_length=%d",
+            request.session_id,
+            len(request.user_message),
+        )
         try:
             account_id = int(principal["sub"])
             command = ChatCommand(
@@ -106,9 +130,26 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
                 runtime_context=request.runtime_context,
             )
             result = agent_provider().chat(command)
-            return ChatResponse.model_validate(result.model_dump())
+            response = ChatResponse.model_validate(result.model_dump())
+            logger.info(
+                "Chat request completed session_id=%s intent=%s total_tokens=%d "
+                "citation_count=%d duration_ms=%.2f",
+                request.session_id,
+                result.intent,
+                result.cost_summary.total_tokens,
+                len(result.citations or []),
+                (time.perf_counter() - started_at) * 1000,
+            )
+            return response
         except RuntimeError as exc:
             # 业务流程抛出的 RuntimeError 统一映射为 503，其余异常交给全局处理。
+            logger.warning(
+                "Chat request failed session_id=%s error_type=%s duration_ms=%.2f",
+                request.session_id,
+                type(exc).__name__,
+                (time.perf_counter() - started_at) * 1000,
+                exc_info=True,
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(exc),

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import logging
+import time
 from typing import Any, get_args
 
 from pydantic import ValidationError
@@ -14,6 +16,7 @@ from domain import Intent, IntentResult
 from .client import call_chat_model, extract_assistant_message
 
 ClassifierModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
+logger = logging.getLogger(__name__)
 
 
 def build_classifier_messages(user_message: str) -> list[dict[str, str]]:
@@ -73,14 +76,19 @@ def call_classifier_model(messages: list[dict[str, str]]) -> dict[str, Any]:
 def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall = call_classifier_model) -> IntentResult | None:
     """调用轻量模型；调用失败或输出不符合意图契约时交还上层决策。"""
 
+    started_at = time.perf_counter()
     try:
         model_response = model_call(build_classifier_messages(user_message))
         content = extract_assistant_message(model_response)
         payload = parse_classifier_json(content)
         if payload is None:
+            logger.warning(
+                "Intent classifier fallback reason=invalid_json duration_ms=%.2f",
+                (time.perf_counter() - started_at) * 1000,
+            )
             return None
 
-        return IntentResult(
+        result = IntentResult(
             intent=payload.get("intent", "unknown"),
             source="classifier",
             confidence=float(payload.get("confidence", 0.7)),
@@ -90,11 +98,23 @@ def classify_intent_with_model(user_message: str,model_call: ClassifierModelCall
                 or "分类模型给出粗意图兜底。"
             ),
         )
+        logger.info(
+            "Intent classifier completed intent=%s confidence=%.2f duration_ms=%.2f",
+            result.intent,
+            result.confidence,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return result
     except (
         RuntimeError,
         TypeError,
         ValueError,
         ValidationError,
-    ):
+    ) as exc:
         # 不把模型的不可用或格式错误当成确定的分类结果。
+        logger.warning(
+            "Intent classifier fallback reason=model_error error_type=%s duration_ms=%.2f",
+            type(exc).__name__,
+            (time.perf_counter() - started_at) * 1000,
+        )
         return None

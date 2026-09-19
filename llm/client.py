@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 import httpx
 
 from config.llm import get_llm_settings
+
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_USER_MESSAGE = "我在小哲电商看到降噪耳机有活动，请问优惠能和会员券一起用吗？"
 
@@ -55,7 +60,9 @@ def call_chat_model(
         if api_key is not None
         else settings.api_key.get_secret_value()
     )
+    resolved_model = model if model is not None else settings.model
     if _api_key_is_missing(resolved_api_key):
+        logger.error("LLM request rejected model=%s reason=missing_api_key", resolved_model)
         raise RuntimeError(
             "缺少有效的 AGENT_OPENAI_API_KEY，无法调用聊天模型。"
         )
@@ -63,7 +70,6 @@ def call_chat_model(
     resolved_base_url = (
         base_url if base_url is not None else settings.base_url
     ).rstrip("/")
-    resolved_model = model if model is not None else settings.model
     request_kwargs = {
         "headers": {
             "Authorization": f"Bearer {resolved_api_key}",
@@ -77,6 +83,13 @@ def call_chat_model(
     }
 
     # 将传输错误归一为运行时错误，供上层决定是否使用安全话术。
+    started_at = time.perf_counter()
+    logger.info(
+        "LLM request started model=%s message_count=%d timeout_seconds=%s",
+        resolved_model,
+        len(messages),
+        settings.timeout_seconds,
+    )
     try:
         if http_client is None:
             response = httpx.post(
@@ -90,6 +103,15 @@ def call_chat_model(
             )
         response.raise_for_status()
     except httpx.HTTPError as exc:
+        error_response = getattr(exc, "response", None)
+        logger.warning(
+            "LLM request failed model=%s status_code=%s error_type=%s duration_ms=%.2f",
+            resolved_model,
+            getattr(error_response, "status_code", None),
+            type(exc).__name__,
+            (time.perf_counter() - started_at) * 1000,
+            exc_info=True,
+        )
         raise RuntimeError(
             "模型接口调用失败，请检查 Base URL、模型名称和 API Key。"
         ) from exc
@@ -97,11 +119,27 @@ def call_chat_model(
     try:
         payload = response.json()
     except ValueError as exc:
+        logger.warning(
+            "LLM response invalid model=%s reason=invalid_json duration_ms=%.2f",
+            resolved_model,
+            (time.perf_counter() - started_at) * 1000,
+        )
         raise RuntimeError("模型接口返回的不是合法 JSON。") from exc
 
     if not isinstance(payload, dict):
+        logger.warning(
+            "LLM response invalid model=%s reason=non_object duration_ms=%.2f",
+            resolved_model,
+            (time.perf_counter() - started_at) * 1000,
+        )
         raise RuntimeError("模型接口返回的 JSON 不是对象结构。")
 
+    logger.info(
+        "LLM request completed model=%s status_code=%d duration_ms=%.2f",
+        resolved_model,
+        response.status_code,
+        (time.perf_counter() - started_at) * 1000,
+    )
     return payload
 
 

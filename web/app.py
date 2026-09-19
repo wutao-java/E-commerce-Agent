@@ -1,6 +1,7 @@
 """创建并配置 FastAPI 应用实例。"""
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -25,11 +26,26 @@ async def lifespan(_app: FastAPI):
         settings.server.log_level,
         settings.server.log_file,
     )
+    started_at = time.perf_counter()
+    logger.info(
+        "Application started service=%s host=%s port=%d log_level=%s file_logging=%s",
+        settings.server.name,
+        settings.server.host,
+        settings.server.port,
+        settings.server.log_level.upper(),
+        bool(settings.server.log_file),
+    )
 
     try:
         yield
     finally:
+        logger.info("Application shutdown started service=%s", settings.server.name)
         await dispose_engine()
+        logger.info(
+            "Application stopped service=%s uptime_seconds=%.2f",
+            settings.server.name,
+            time.perf_counter() - started_at,
+        )
 
 
 def create_app(agent_provider: AgentProvider | None = None) -> FastAPI:
@@ -53,12 +69,15 @@ def create_app(agent_provider: AgentProvider | None = None) -> FastAPI:
     )
 
     @application.exception_handler(Exception)
-    async def system_exception_handler(_request: Request,exc: Exception) -> JSONResponse:
+    async def system_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """记录未捕获错误，但不把内部异常详情返回给客户端。"""
 
-        logger.exception(
-            "Unhandled request error",
-            exc_info=exc,
+        logger.error(
+            "Unhandled request error method=%s path=%s error_type=%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            exc_info=(type(exc), exc, exc.__traceback__),
         )
         return JSONResponse(
             status_code=500,

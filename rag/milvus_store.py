@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 from pymilvus import MilvusClient
 
 from config.rag import RagSettings
 from domain.rag import KnowledgeChunk
+
+
+logger = logging.getLogger(__name__)
 
 
 class CourseMilvusStore:
@@ -26,6 +31,7 @@ class CourseMilvusStore:
             if token:
                 kwargs["token"] = token
             self.client = MilvusClient(**kwargs)
+            logger.info("Milvus client initialized")
         return self.client
 
     def collection_name(self, version: str) -> str:
@@ -51,8 +57,15 @@ class CourseMilvusStore:
             raise ValueError("课程知识与向量数量不一致。")
         if any(len(vector) != len(vectors[0]) for vector in vectors):
             raise ValueError("课程知识向量维度不一致。")
+        started_at = time.perf_counter()
         name = self.collection_name(version)
         client = self._client()
+        logger.info(
+            "Milvus publish started collection=%s chunk_count=%d vector_dimension=%d",
+            name,
+            len(chunks),
+            len(vectors[0]),
+        )
         # 同版本 collection 可重复发布，但必须先确认向量维度兼容。
         if client.has_collection(name):
             dimension = client.describe_collection(name)["fields"]
@@ -77,6 +90,12 @@ class CourseMilvusStore:
             ])
         client.flush(name)
         self.verify(version, {chunk.chunk_id for chunk in chunks})
+        logger.info(
+            "Milvus publish completed collection=%s chunk_count=%d duration_ms=%.2f",
+            name,
+            len(chunks),
+            (time.perf_counter() - started_at) * 1000,
+        )
         return name
 
     def verify(self, version: str, expected_ids: set[str]) -> None:
@@ -92,6 +111,11 @@ class CourseMilvusStore:
         rows = client.query(name, ids=sorted(expected_ids), output_fields=["chunk_id"])
         if {row["chunk_id"] for row in rows} != expected_ids:
             raise RuntimeError("课程 Milvus 索引不完整；请执行 python -m rag.commands rebuild。")
+        logger.info(
+            "Milvus collection verified collection=%s expected_count=%d",
+            name,
+            len(expected_ids),
+        )
 
     def search(self, version: str, vector: list[float], allowed_ids: set[str], limit: int) -> list[tuple[str, float]]:
         """在允许的知识 ID 范围内执行向量相似度检索。
@@ -112,4 +136,12 @@ class CourseMilvusStore:
             self.collection_name(version), data=[vector], filter=expression, limit=limit,
             output_fields=["chunk_id"],
         )
-        return [(str(hit["chunk_id"]), float(hit["distance"])) for hit in results[0]]
+        matches = [(str(hit["chunk_id"]), float(hit["distance"])) for hit in results[0]]
+        logger.debug(
+            "Milvus search completed collection=%s allowed_count=%d result_count=%d limit=%d",
+            self.collection_name(version),
+            len(allowed_ids),
+            len(matches),
+            limit,
+        )
+        return matches

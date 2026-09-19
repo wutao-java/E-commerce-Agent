@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from threading import Lock
+import time
 from typing import Any
 
 from config.rag import get_rag_settings
@@ -29,6 +31,7 @@ from .intent_service import ClassifierCall, classify_intent
 
 
 ModelCall = Callable[[list[dict[str, str]]], dict[str, Any]]
+logger = logging.getLogger(__name__)
 
 
 class CustomerServiceAgent:
@@ -50,14 +53,28 @@ class CustomerServiceAgent:
     def chat(self, command: ChatCommand) -> ChatResult:
         """按粗意图选择 Prompt 片段并生成客服回答。"""
 
+        started_at = time.perf_counter()
         # 计数只记录当前进程内该会话的调用次数，不代表持久化会话状态。
         message_count = self._increment_message_count(
             command.session_id
+        )
+        logger.info(
+            "Agent chat started session_id=%s message_count=%d rag_enabled=%s",
+            command.session_id,
+            message_count,
+            self._rag_service is not None,
         )
 
         intent_result = classify_intent(
             command.user_message,
             classifier_call=self._classifier_call,
+        )
+        logger.info(
+            "Intent classified session_id=%s intent=%s source=%s confidence=%.2f",
+            command.session_id,
+            intent_result.intent,
+            intent_result.source,
+            intent_result.confidence,
         )
         # 先准备不依赖外部事实的安全话术，供回答模型不可用时使用。
         fallback_answer = build_fallback_answer(intent_result)
@@ -67,6 +84,12 @@ class CustomerServiceAgent:
         fragments = select_prompt_fragments(
             intent_result.intent,
             registry,
+        )
+        logger.info(
+            "Prompt fragments selected session_id=%s fragment_count=%d fragment_ids=%s",
+            command.session_id,
+            len(fragments),
+            [fragment.fragment_id for fragment in fragments],
         )
         citations: list[Citation] | None = None
         rag_state: dict[str, Any] | None = None
@@ -82,9 +105,22 @@ class CustomerServiceAgent:
             fragments = [fragment for fragment in fragments if "all" in fragment.applies_to]
             try:
                 _plan, hits, rag_state = self._rag_service.retrieve(command, intent_result.intent)
-            except RuntimeError:
+            except RuntimeError as exc:
+                logger.warning(
+                    "RAG retrieval failed session_id=%s error_type=%s",
+                    command.session_id,
+                    type(exc).__name__,
+                    exc_info=True,
+                )
                 hits = []
                 rag_state = {"mode": "milvus_hybrid_retrieval", "fallback_reason": "retrieval_unavailable"}
+            logger.info(
+                "RAG retrieval completed session_id=%s hit_count=%d cache_hit=%s fallback_reason=%s",
+                command.session_id,
+                len(hits),
+                rag_state.get("cache_hit", False),
+                rag_state.get("fallback_reason"),
+            )
             if hits:
                 messages = render_rag_messages(
                     command, intent_result, hits, fragments,
@@ -105,6 +141,13 @@ class CustomerServiceAgent:
                             {"role": "user", "content": command.user_message}]
                 model_answer = GroundedAnswerResult(answer=answer, fallback_reason="no_reliable_knowledge")
                 citations = []
+
+        logger.info(
+            "Answer composed session_id=%s used_model=%s fallback_reason=%s",
+            command.session_id,
+            model_answer.used_model,
+            model_answer.fallback_reason,
+        )
 
         # 只观察回答模型实际收到的 Prompt；独立意图分类调用不计入本轮摘要。
         cost_summary = build_cost_summary(
@@ -131,7 +174,7 @@ class CustomerServiceAgent:
         }
 
         # 这些摘要描述实际处理步骤，并非暴露模型的内部推理过程。
-        return ChatResult(
+        result = ChatResult(
             session_id=command.session_id,
             answer=model_answer.answer,
             intent=intent_result.intent,
@@ -203,6 +246,16 @@ class CustomerServiceAgent:
             },
             citations=citations,
         )
+        logger.info(
+            "Agent chat completed session_id=%s intent=%s used_model=%s "
+            "total_tokens=%d duration_ms=%.2f",
+            command.session_id,
+            intent_result.intent,
+            model_answer.used_model,
+            cost_summary.total_tokens,
+            (time.perf_counter() - started_at) * 1000,
+        )
+        return result
 
     def _increment_message_count(self, session_id: str) -> int:
         """安全地递增单进程会话消息计数。"""

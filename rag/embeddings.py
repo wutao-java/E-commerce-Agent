@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import OrderedDict
 from threading import Lock
+import time
 
 import httpx
 
 from config.rag import RagSettings
+
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingClient:
@@ -41,10 +46,21 @@ class EmbeddingClient:
         """
         key = self.settings.embedding_api_key.get_secret_value()
         if not key or key in {"your-api-key", "YOUR_API_KEY"}:
+            logger.error(
+                "Embedding request rejected model=%s reason=missing_api_key",
+                self.settings.embedding_model,
+            )
             raise RuntimeError("缺少 COURSE_RAG_EMBEDDING_API_KEY，无法检索课程知识。")
         vectors: list[list[float]] = []
         # 兼容百炼等单次最多接受 10 条输入的 OpenAI-compatible 服务。
         batch_size = 10
+        started_at = time.perf_counter()
+        logger.info(
+            "Embedding request started model=%s input_count=%d batch_count=%d",
+            self.settings.embedding_model,
+            len(texts),
+            (len(texts) + batch_size - 1) // batch_size,
+        )
         for start in range(0, len(texts), batch_size):
             batch = texts[start:start + batch_size]
             kwargs = {
@@ -59,10 +75,35 @@ class EmbeddingClient:
                 data = sorted(response.json()["data"], key=lambda item: item["index"])
                 parsed = [[float(value) for value in item["embedding"]] for item in data]
             except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError) as exc:
+                error_response = getattr(exc, "response", None)
+                logger.warning(
+                    "Embedding request failed model=%s batch_size=%d status_code=%s "
+                    "error_type=%s duration_ms=%.2f",
+                    self.settings.embedding_model,
+                    len(batch),
+                    getattr(error_response, "status_code", None),
+                    type(exc).__name__,
+                    (time.perf_counter() - started_at) * 1000,
+                    exc_info=True,
+                )
                 raise RuntimeError("课程 embedding 服务调用失败。") from exc
             if len(parsed) != len(batch) or any(not vector or len(vector) != len(parsed[0]) for vector in parsed):
+                logger.warning(
+                    "Embedding response invalid model=%s expected_count=%d actual_count=%d",
+                    self.settings.embedding_model,
+                    len(batch),
+                    len(parsed),
+                )
                 raise RuntimeError("课程 embedding 服务返回的向量数量或维度不一致。")
             vectors.extend(parsed)
+        logger.info(
+            "Embedding request completed model=%s input_count=%d vector_dimension=%d "
+            "duration_ms=%.2f",
+            self.settings.embedding_model,
+            len(texts),
+            len(vectors[0]) if vectors else 0,
+            (time.perf_counter() - started_at) * 1000,
+        )
         return vectors
 
     def embed(self, text: str) -> list[float]:
@@ -83,6 +124,11 @@ class EmbeddingClient:
             cached = self._query_cache.get(cache_key)
             if cached is not None:
                 self._query_cache.move_to_end(cache_key)
+                logger.debug(
+                    "Embedding cache hit model=%s cache_size=%d",
+                    self.settings.embedding_model,
+                    len(self._query_cache),
+                )
                 return cached
         vector = self.embed_many([text])[0]
         with self._lock:
