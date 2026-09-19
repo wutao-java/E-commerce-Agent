@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date
 from uuid import uuid4
@@ -60,6 +61,27 @@ def test_embedding_client_caches_repeated_queries() -> None:
         embedding = EmbeddingClient(RagSettings(embedding_api_key="course-key"), http_client=client)
         assert embedding.embed("耳机") == embedding.embed("耳机")
     assert calls == ["/v1/embeddings"]
+
+
+def test_embedding_client_limits_batch_size_for_compatible_providers() -> None:
+    batch_sizes: list[int] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        inputs = json.loads(request.content)["input"]
+        batch_sizes.append(len(inputs))
+        return httpx.Response(200, json={
+            "data": [
+                {"index": index, "embedding": [float(index), 0.0]}
+                for index in range(len(inputs))
+            ],
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        embedding = EmbeddingClient(RagSettings(embedding_api_key="course-key"), http_client=client)
+        vectors = embedding.embed_many([f"知识片段 {index}" for index in range(21)])
+
+    assert len(vectors) == 21
+    assert batch_sizes == [10, 10, 1]
 
 
 def test_course_markdown_keeps_ids_and_validity() -> None:

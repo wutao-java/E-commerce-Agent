@@ -43,9 +43,10 @@ class EmbeddingClient:
         if not key or key in {"your-api-key", "YOUR_API_KEY"}:
             raise RuntimeError("缺少 COURSE_RAG_EMBEDDING_API_KEY，无法检索课程知识。")
         vectors: list[list[float]] = []
-        # 限制单次请求规模，避免大批量知识发布时超过服务端输入上限。
-        for start in range(0, len(texts), 32):
-            batch = texts[start:start + 32]
+        # 兼容百炼等单次最多接受 10 条输入的 OpenAI-compatible 服务。
+        batch_size = 10
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start:start + batch_size]
             kwargs = {
                 "headers": {"Authorization": f"Bearer {key}"},
                 "json": {"model": self.settings.embedding_model, "input": batch},
