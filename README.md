@@ -11,7 +11,7 @@ E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当
 - 支持 INI 配置、`.env` 文件和系统环境变量
 - 支持控制台日志和按大小轮转的文件日志
 - 基于 SQLAlchemy 2.x 和 asyncmy 提供异步 MySQL 引擎与会话
-- 基于 PyJWT 提供 RS256 JWT 签发与校验
+- 基于 PyJWT 校验 Spring Boot 登录后签发的 RS256 Access Token
 - 提供无需鉴权的健康检查接口
 - 在应用关闭时释放已创建的数据库连接池
 - 使用 Pytest 覆盖模型客户端、聊天契约、意图识别和依赖边界
@@ -84,7 +84,7 @@ E-commerce-agent/
 │   ├── intent_classifier.py # 意图分类模型适配器
 │   └── answer_generator.py # 客服回答模型适配器
 ├── security/
-│   └── jwt.py              # JWT 配置、签发与校验
+│   └── jwt.py              # Spring Boot 委托 JWT 验签
 ├── tests/                  # 自动化测试
 ├── web/
 │   ├── routers/
@@ -101,9 +101,9 @@ E-commerce-agent/
 
 - Python 3.11 或更高版本
 - 使用数据库功能时需要可访问的 MySQL 实例
-- 使用 JWT 功能时需要匹配的 RSA 私钥和公钥
+- 调用 `/chat` 时需要配置 Spring Boot 签发密钥对应的 RSA 公钥
 
-数据库和 JWT 资源均按需加载。未配置 MySQL 或 RSA 密钥时，健康检查等不依赖这些资源的功能仍可正常启动。
+数据库和 JWT 资源均按需加载。未配置 MySQL 或 RSA 公钥时，健康检查等不依赖这些资源的功能仍可正常启动，但 `/chat` 会返回 `503`。
 
 ## 快速开始
 
@@ -223,28 +223,22 @@ async def example(session: AsyncSession = Depends(get_session)) -> None:
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `JWT_PRIVATE_KEY` | 空 | 用于签发令牌的 PEM 私钥 |
-| `JWT_PUBLIC_KEY` | 空 | 用于校验令牌的 PEM 公钥 |
-| `JWT_ALGORITHM` | `RS256` | JWT 签名算法 |
-| `JWT_EXPIRE_MINUTES` | `60` | 默认有效期，单位为分钟，最小值为 1 |
+| `AUTH_JWT_PUBLIC_KEY` | 空 | Spring Boot 签发密钥对应的 PEM 公钥 |
+| `AUTH_JWT_ALGORITHM` | `RS256` | 允许的签名算法，目前固定为 RS256 |
+| `AUTH_JWT_ISSUER` | `commerce-backend` | 必须匹配的签发方 |
+| `AUTH_JWT_AGENT_AUDIENCE` | `ecommerce-agent` | 必须包含的 Agent audience |
+| `AUTH_JWT_REQUIRED_SCOPE` | `agent:chat` | 调用 `/chat` 必须具有的 scope |
+| `AUTH_JWT_LEEWAY_SECONDS` | `5` | 时间声明允许的时钟偏差秒数 |
 
-在 `.env` 或部署平台中配置 PEM 密钥时，可用 `\n` 表示换行，程序会在使用前还原。例如：
+Agent 只验签，不生成令牌，也不得保存 Spring Boot 的私钥。在 `.env` 或部署平台中配置 PEM 公钥时，可用 `\n` 表示换行，程序会在使用前还原：
 
 ```dotenv
-JWT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
-JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
+AUTH_JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
 ```
 
-签发和校验示例：
+`/chat` 只接受 Spring Boot 登录或注册后签发的 Access Token，并校验 `iss`、`aud`、`exp`、`iat`、`nbf`、`sub`、`jti`、`token_use` 和 `scope`。请求体中的旧身份字段仅用于向后兼容，可信身份始终来自 JWT。Spring Boot 与 Agent 必须使用相同的 issuer、Agent audience 和公钥。
 
-```python
-from security.jwt import create_token, decode_token
-
-token = create_token({"sub": "user-1"})
-claims = decode_token(token)
-```
-
-签发时会自动写入 UTC 时间的 `iat` 和 `exp` 声明，并覆盖调用方传入的同名字段。私钥或公钥为空时，实际执行签发或校验操作会抛出明确的配置异常。
+调用链约定为：浏览器或 Apifox 登录 Spring Boot 获得默认 30 分钟的 RS256 Access Token，之后使用 Bearer Token 调用 Spring Boot 或 Agent；Spring Boot 转调 Agent、Agent 访问 `/api/agent/facts/**` 时都原样转发该 Token。
 
 ## 运行测试
 

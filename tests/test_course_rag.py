@@ -120,7 +120,9 @@ def test_hybrid_retrieval_rewrite_cache_and_realtime_boundary() -> None:
     assert store.calls == 1
 
 
-def test_course_mode_returns_only_actual_citations() -> None:
+def test_course_mode_returns_only_actual_citations(
+    agent_auth_headers: dict[str, str],
+) -> None:
     settings = RagSettings(enabled=True, as_of_date="2026-03-15", low_confidence_score=0.5)
     service = CourseRagService(settings=settings, embedding=FakeEmbedding(), store=FakeStore())
     agent = CustomerServiceAgent(
@@ -128,7 +130,10 @@ def test_course_mode_returns_only_actual_citations() -> None:
         classifier_call=lambda _message: None,
         model_call=lambda _messages: {"choices": [{"message": {"content": "课程资料显示不可以叠加。"}}]},
     )
-    with TestClient(create_app(agent_provider=lambda: agent)) as client:
+    with TestClient(
+        create_app(agent_provider=lambda: agent),
+        headers=agent_auth_headers,
+    ) as client:
         response = client.post("/chat", json={
             "session_id": "course-demo", "runtime_user_id": "U1001",
             "user_message": "金卡会员买耳机活动，会员价可以叠券吗？",

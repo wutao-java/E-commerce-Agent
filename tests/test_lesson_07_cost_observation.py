@@ -100,7 +100,9 @@ def test_failed_model_keeps_safe_answer_and_marks_estimate() -> None:
     assert "不代表实际产生费用" in result.cost_summary.pricing_note
 
 
-def test_chat_exposes_cost_and_counts_session_events() -> None:
+def test_chat_exposes_cost_and_counts_session_events(
+    agent_auth_headers: dict[str, str],
+) -> None:
     """HTTP 响应暴露成本，同一进程内同一会话事件数递增。"""
 
     agent = CustomerServiceAgent(model_call=lambda _messages: model_response({
@@ -113,7 +115,10 @@ def test_chat_exposes_cost_and_counts_session_events() -> None:
         "runtime_user_id": "U1001",
         "user_message": "会员价还能叠加会员券吗？",
     }
-    with TestClient(create_app(agent_provider=lambda: agent)) as client:
+    with TestClient(
+        create_app(agent_provider=lambda: agent),
+        headers=agent_auth_headers,
+    ) as client:
         capabilities = client.get("/capabilities")
         first = client.post("/chat", json=request)
         second = client.post("/chat", json=request)

@@ -176,7 +176,9 @@ def test_answer_model_failure_uses_safe_fallback() -> None:
     )
 
 
-def test_chat_api_returns_structured_intent_and_capabilities() -> None:
+def test_chat_api_returns_structured_intent_and_capabilities(
+    agent_auth_headers: dict[str, str],
+) -> None:
     """聊天接口返回结构化意图，并保留对应能力声明。"""
 
     def answer_model(
@@ -195,7 +197,7 @@ def test_chat_api_returns_structured_intent_and_capabilities() -> None:
         "user_message": "我想申请退款。",
     }
 
-    with TestClient(application) as client:
+    with TestClient(application, headers=agent_auth_headers) as client:
         first_response = client.post("/chat", json=payload)
         second_response = client.post("/chat", json=payload)
         capabilities_response = client.get("/capabilities")

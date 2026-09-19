@@ -14,7 +14,7 @@ ReasoningView = Literal["default", "off", "summary", "teaching"]
 
 
 class ChatRequest(BaseModel):
-    """校验 HTTP 输入；runtime_* 字段目前由调用方在请求中提供。"""
+    """校验 HTTP 输入；旧 runtime 身份字段仅为兼容保留。"""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -22,9 +22,10 @@ class ChatRequest(BaseModel):
         min_length=1,
         description="当前对话会话 ID",
     )
-    runtime_user_id: str = Field(
+    runtime_user_id: str | None = Field(
+        default=None,
         min_length=1,
-        description="系统侧提供的用户 ID",
+        description="兼容字段；可信用户 ID 来自 JWT",
     )
     runtime_nickname: str | None = Field(
         default=None,
@@ -54,7 +55,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="页面等运行时上下文",
     )
-    runtime_account_id: int | None = None
+    runtime_account_id: int | None = Field(
+        default=None,
+        description="兼容字段；可信账户 ID 来自 JWT",
+    )
 
 
 class ChatResponse(BaseModel):
