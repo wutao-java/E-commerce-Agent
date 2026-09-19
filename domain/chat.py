@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .cost import CostSummary
 from .intent import Intent, IntentResult
@@ -24,6 +24,11 @@ class ChatCommand(BaseModel):
     user_message: str
     runtime_context: dict[str, Any] | None = None
     runtime_account_id: int | None = None
+    access_token: str | None = Field(
+        default=None,
+        exclude=True,
+        repr=False,
+    )
 
 
 class ChatResult(BaseModel):

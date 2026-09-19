@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from config import clear_settings_cache
 from domain import ChatCommand, ChatResult, CostSummary, IntentResult
 from web.app import create_app
 
@@ -155,6 +156,7 @@ def test_chat_returns_stable_response_contract(
 def test_chat_uses_identity_from_jwt(
     client: TestClient,
     stub_agent: StubAgent,
+    agent_auth_headers: dict[str, str],
 ) -> None:
     payload = valid_chat_payload()
     payload.update({
@@ -173,6 +175,9 @@ def test_chat_uses_identity_from_jwt(
     assert stub_agent.received_request.runtime_nickname == "张三"
     assert stub_agent.received_request.runtime_member_level == "gold"
     assert stub_agent.received_request.runtime_risk_level == "low"
+    assert stub_agent.received_request.access_token == (
+        agent_auth_headers["Authorization"].removeprefix("Bearer ")
+    )
 
 
 @pytest.mark.parametrize(
@@ -270,3 +275,18 @@ def test_capabilities_describes_lesson_02_boundary(
     assert payload["features"]["runtime_context"] is True
     assert payload["features"]["tool_calls"] is False
     assert payload["features"]["memory"] is False
+
+
+def test_capabilities_reflects_realtime_fact_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("START_INTEGRATIONS", "true")
+    clear_settings_cache()
+    application = create_app(agent_provider=StubAgent)
+
+    with TestClient(application) as client:
+        response = client.get("/capabilities")
+
+    assert response.status_code == 200
+    assert response.json()["lesson"]["number"] == 17
+    assert response.json()["features"]["realtime_business_facts"] is True

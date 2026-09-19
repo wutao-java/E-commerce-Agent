@@ -1,6 +1,6 @@
 # E-commerce Agent
 
-E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当前版本在通用配置、日志、异步 MySQL 和 JWT 基础上，提供聊天接口、规则优先的结构化意图识别和 OpenAI-compatible 模型回答能力。
+E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当前版本在通用配置、日志、异步 MySQL 和 JWT 基础上，提供聊天接口、结构化意图识别、课程 RAG 和只读实时业务事实能力。
 
 ## 当前能力
 
@@ -8,6 +8,8 @@ E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当
 - 提供 `/chat` 聊天接口和 `/capabilities` 能力声明
 - 支持规则优先、分类模型兜底的结构化意图识别
 - 支持回答模型失败时回退到确定性安全话术
+- 支持按当前用户 JWT 查询订单、物流、商品价格和库存事实
+- 实时事实与静态知识分流，事实成功后由模型基于受控数据组织回答
 - 支持 INI 配置、`.env` 文件和系统环境变量
 - 支持控制台日志和按大小轮转的文件日志
 - 基于 SQLAlchemy 2.x 和 asyncmy 提供异步 MySQL 引擎与会话
@@ -16,11 +18,34 @@ E-commerce Agent 是一个面向电子商务客服场景的 FastAPI 服务。当
 - 在应用关闭时释放已创建的数据库连接池
 - 使用 Pytest 覆盖模型客户端、聊天契约、意图识别和依赖边界
 
-> 默认 `/chat` 尚未启用 RAG，也未接入商品、订单、工具调用和售后工作流，不能执行退款、赔偿或其他业务动作。课程 RAG 仅供隔离练习。
+> 默认关闭课程 RAG 和实时事实集成。当前实时能力仅为受控只读查询，不开放 Tool Calling，也不能执行取消订单、退款、赔偿或其他业务动作。
+
+## 实时业务事实（第 17 课）
+
+设置 `START_INTEGRATIONS=true` 后，Agent 会将订单、物流、商品价格和库存问题从静态 RAG 分流，通过 Spring Boot 的 `/api/agent/facts/**` 接口查询。Agent 原样转发当前请求中已验证的 Access Token，Spring Boot 再依据 JWT `sub` 限制订单归属；请求体中的用户字段和 `runtime_context` 不作为授权依据。
+
+```text
+/chat
+  -> detect_business_fact_need(user_message)
+  -> BusinessFactService.lookup(need, access_token)
+  -> Spring Boot 只读事实接口校验当前用户
+  -> 查询成功：回答模型仅基于可信事实组织回复
+  -> 查询失败：跳过模型并返回确定性安全话术
+```
+
+订单不存在与不属于当前用户统一返回“未查到或不属于当前用户”，避免订单号枚举。JWT、完整响应正文和完整订单号不会写入业务事实调用日志；`session_state.business_facts` 也不会回传原始事实对象。
+
+```dotenv
+START_INTEGRATIONS=true
+ECOMMERCE_BASE_URL=http://127.0.0.1:8080
+ECOMMERCE_TIMEOUT_SECONDS=5
+```
+
+当前边界仅包括订单状态、物流状态、商品当前价格和库存。退款进度、写操作、复杂澄清、LangGraph 和人工审批不在本课范围。
 
 ## 课程 RAG 沙箱（第 08–16 课）
 
-默认关闭，不影响当前 `/chat` 或 Spring Boot 商城。课程原文位于 `knowledge/course/`，向量仅写入独立的 `course_rag_<内容指纹>` Milvus collection。文档中的历史活动不代表今天有效的商城政策；正式业务知识与实时订单、库存、物流等信息均未接入。
+默认关闭，不影响当前 `/chat` 或 Spring Boot 商城。课程原文位于 `knowledge/course/`，向量仅写入独立的 `course_rag_<内容指纹>` Milvus collection。文档中的历史活动不代表今天有效的商城政策；实时订单、库存和物流由第 17 课事实链路处理，不从课程知识库推断。
 
 启用前需要可访问的 Milvus Standalone（默认 `http://127.0.0.1:19530`）和支持 OpenAI-compatible `/embeddings` 的独立 embedding Key。没有 Milvus 时可运行 `docker compose -f docker-compose.course-milvus.yml up -d`；若本机 19530 端口已有 Milvus，则直接复用，避免端口冲突。安装依赖后，在本机 `.env` 中设置：
 
@@ -67,6 +92,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8001/chat -ContentType 'app
 ```text
 E-commerce-agent/
 ├── agent/
+│   ├── business_fact_planning.py # 实时事实识别和参数提取
 │   ├── customer_service_agent.py # 客服流程编排
 │   ├── intent_service.py         # 规则与分类模型的意图识别编排
 │   └── intent_rules.py           # 高置信意图规则
@@ -77,14 +103,19 @@ E-commerce-agent/
 ├── db/
 │   └── base.py             # SQLAlchemy 声明式模型基类
 ├── domain/
+│   ├── business_fact.py     # 实时事实查询契约
 │   ├── chat.py             # Agent 内部聊天命令与结果
 │   └── intent.py           # 意图类型与识别结果
+├── integrations/
+│   └── ecommerce_client.py # Spring Boot 只读事实客户端
 ├── llm/
 │   ├── client.py           # OpenAI-compatible 通用客户端
 │   ├── intent_classifier.py # 意图分类模型适配器
 │   └── answer_generator.py # 客服回答模型适配器
 ├── security/
 │   └── jwt.py              # Spring Boot 委托 JWT 验签
+├── services/
+│   └── business_facts.py   # 事实查询与确定性摘要
 ├── tests/                  # 自动化测试
 ├── web/
 │   ├── routers/
@@ -183,7 +214,9 @@ $env:AGENT_CENTER_CONFIG = "D:\config\e-commerce-agent.ini"
 | `SERVER_PORT` | `8000` | 服务监听端口，范围为 1～65535 |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `LOG_FILE` | 空 | 日志文件路径；为空时仅输出到控制台 |
-| `START_INTEGRATIONS` | `false` | 外部集成开关预留项，当前未绑定具体集成 |
+| `START_INTEGRATIONS` | `false` | 是否启用 Spring Boot 只读实时业务事实查询 |
+| `ECOMMERCE_BASE_URL` | `http://127.0.0.1:8080` | Spring Boot 业务接口地址 |
+| `ECOMMERCE_TIMEOUT_SECONDS` | `5` | 实时事实 HTTP 查询超时秒数，范围为 (0, 30] |
 
 配置 `LOG_FILE` 后，应用会自动创建日志目录。单个日志文件最大为 10 MiB，并保留 5 个历史文件。
 

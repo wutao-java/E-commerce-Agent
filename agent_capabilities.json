@@ -1,14 +1,14 @@
 {
   "schema_version": "agent_capabilities_v1",
   "lesson": {
-    "id": "lesson-16-course-rag-milvus",
-    "number": 16,
-    "title": "课程 RAG 与 Milvus",
-    "summary": "课程知识检索需显式开启和发布索引；默认保留原有聊天流程。"
+    "id": "lesson-17-realtime-business-facts",
+    "number": 17,
+    "title": "实时业务事实与业务接口",
+    "summary": "订单、物流和商品价格库存通过只读业务接口获取，再由模型基于可信事实组织回答。"
   },
   "agent": {
     "name": "小哲电商客服 Agent",
-    "version": "lesson-16-course-rag-milvus"
+    "version": "lesson-17-realtime-business-facts"
   },
   "endpoints": {
     "health": true,
@@ -26,6 +26,7 @@
     "grounded_model_answer": true,
     "structured_intent": true,
     "rag_citations": false,
+    "realtime_business_facts": false,
     "tool_calls": false,
     "workflow": false,
     "human_approval": false,
@@ -38,7 +39,8 @@
   "disabled_reasons": {
     "reasoning_content": "当前版本只返回公开执行摘要，不公开模型隐藏推理。",
     "rag_citations": "课程 RAG 默认关闭；配置 COURSE_RAG_ENABLED=true 并发布 Milvus 索引后可返回引用。",
-    "tool_calls": "当前版本尚未接入业务工具。",
+    "realtime_business_facts": "实时事实集成默认关闭；配置 START_INTEGRATIONS=true 后启用只读查询。",
+    "tool_calls": "当前版本通过受控服务查询只读事实，尚未开放模型 Tool Calling。",
     "workflow": "当前版本尚未接入售后工作流。",
     "human_approval": "当前版本尚未接入人工审批。",
     "memory": "当前会话计数不是生产级会话记忆。",

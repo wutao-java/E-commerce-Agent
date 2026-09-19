@@ -4,6 +4,7 @@ from .chat import ChatCommand, ChatResult
 from .cost import CostSummary, TokenUsage
 from .intent import Intent, IntentResult, IntentSource
 from .prompt import PromptFragment
+from .business_fact import BusinessFactKind, BusinessFactNeed, BusinessFactResult
 
 __all__ = [
     "ChatCommand",
@@ -14,4 +15,7 @@ __all__ = [
     "IntentSource",
     "PromptFragment",
     "TokenUsage",
+    "BusinessFactKind",
+    "BusinessFactNeed",
+    "BusinessFactResult",
 ]

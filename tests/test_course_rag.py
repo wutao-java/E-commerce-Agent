@@ -155,7 +155,10 @@ def test_course_mode_without_evidence_does_not_call_answer_model() -> None:
     )
     result = agent.chat(course_command("我的订单物流到哪了？"))
     assert result.citations == []
-    assert result.session_state["rag"]["fallback_reason"] == "realtime_query"
+    assert "rag" not in result.session_state
+    assert result.session_state["business_facts"]["result"]["failure_reason"] == (
+        "integration_disabled"
+    )
 
 
 def test_weak_neighbor_is_not_returned_as_evidence(monkeypatch: pytest.MonkeyPatch) -> None:

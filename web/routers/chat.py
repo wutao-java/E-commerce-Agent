@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 import logging
 import time
 from typing import Annotated, Any, Protocol
@@ -10,6 +11,7 @@ from typing import Annotated, Any, Protocol
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from config import get_settings
 from config.capabilities import load_agent_capabilities
 from config.rag import get_rag_settings
 from domain import ChatCommand, ChatResult
@@ -18,6 +20,14 @@ from web.schema import ChatRequest, ChatResponse
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AgentPrincipal:
+    """保存已验证 JWT 声明和仅供内部转发的原始令牌。"""
+
+    claims: dict[str, Any]
+    access_token: str = field(repr=False)
 
 
 class ChatAgent(Protocol):
@@ -36,7 +46,7 @@ def require_agent_principal(
         HTTPAuthorizationCredentials | None,
         Depends(bearer_scheme),
     ],
-) -> dict[str, Any]:
+) -> AgentPrincipal:
     """验证内部 Bearer JWT，并返回可信声明。"""
 
     if credentials is None or credentials.scheme.lower() != "bearer":
@@ -87,7 +97,10 @@ def require_agent_principal(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     logger.info("Agent authentication succeeded")
-    return claims
+    return AgentPrincipal(
+        claims=claims,
+        access_token=credentials.credentials,
+    )
 
 
 def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
@@ -99,13 +112,22 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
     def capabilities() -> dict:
         """返回当前 Agent 能力边界。"""
         capabilities = load_agent_capabilities().copy()
-        capabilities["features"] = {**capabilities["features"], "rag_citations": get_rag_settings().enabled}
+        capabilities["features"] = {
+            **capabilities["features"],
+            "rag_citations": get_rag_settings().enabled,
+            "realtime_business_facts": (
+                get_settings().server.start_integrations
+            ),
+        }
         return capabilities
 
     @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
     def chat(
         request: ChatRequest,
-        principal: Annotated[dict[str, Any], Depends(require_agent_principal)],
+        principal: Annotated[
+            AgentPrincipal,
+            Depends(require_agent_principal),
+        ],
     ) -> ChatResponse:
         """将 HTTP 请求转换为内部命令，再把处理结果校验为响应。"""
 
@@ -116,18 +138,20 @@ def create_chat_router(agent_provider: AgentProvider) -> APIRouter:
             len(request.user_message),
         )
         try:
-            account_id = int(principal["sub"])
+            claims = principal.claims
+            account_id = int(claims["sub"])
             command = ChatCommand(
                 session_id=request.session_id,
                 runtime_user_id=str(
-                    principal.get("business_user_id") or f"U{account_id}"
+                    claims.get("business_user_id") or f"U{account_id}"
                 ),
-                runtime_nickname=principal.get("nickname"),
-                runtime_member_level=principal.get("member_level"),
-                runtime_risk_level=principal.get("risk_level"),
+                runtime_nickname=claims.get("nickname"),
+                runtime_member_level=claims.get("member_level"),
+                runtime_risk_level=claims.get("risk_level"),
                 runtime_account_id=account_id,
                 user_message=request.user_message,
                 runtime_context=request.runtime_context,
+                access_token=principal.access_token,
             )
             result = agent_provider().chat(command)
             response = ChatResponse.model_validate(result.model_dump())
