@@ -1,0 +1,49 @@
+{
+  "schema_version": "agent_capabilities_v1",
+  "lesson": {
+    "id": "lesson-16-course-rag-milvus",
+    "number": 16,
+    "title": "课程 RAG 与 Milvus",
+    "summary": "课程知识检索需显式开启和发布索引；默认保留原有聊天流程。"
+  },
+  "agent": {
+    "name": "小哲电商客服 Agent",
+    "version": "lesson-16-course-rag-milvus"
+  },
+  "endpoints": {
+    "health": true,
+    "chat": true,
+    "chat_resume": false,
+    "trace": false,
+    "eval_run": false
+  },
+  "features": {
+    "chat": true,
+    "runtime_context": true,
+    "reasoning_summary": true,
+    "reasoning_content": false,
+    "real_llm_answer": true,
+    "grounded_model_answer": true,
+    "structured_intent": true,
+    "rag_citations": false,
+    "tool_calls": false,
+    "workflow": false,
+    "human_approval": false,
+    "memory": false,
+    "hooks": false,
+    "trace": false,
+    "evaluation": false,
+    "cost_summary": true
+  },
+  "disabled_reasons": {
+    "reasoning_content": "当前版本只返回公开执行摘要，不公开模型隐藏推理。",
+    "rag_citations": "课程 RAG 默认关闭；配置 COURSE_RAG_ENABLED=true 并发布 Milvus 索引后可返回引用。",
+    "tool_calls": "当前版本尚未接入业务工具。",
+    "workflow": "当前版本尚未接入售后工作流。",
+    "human_approval": "当前版本尚未接入人工审批。",
+    "memory": "当前会话计数不是生产级会话记忆。",
+    "hooks": "当前版本尚未接入 Hooks。",
+    "trace": "当前版本尚未接入调用轨迹。",
+    "evaluation": "当前版本尚未接入回归评测。"
+  }
+}
