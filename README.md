@@ -238,7 +238,7 @@ AUTH_JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
 
 `/chat` 只接受 Spring Boot 登录或注册后签发的 Access Token，并校验 `iss`、`aud`、`exp`、`iat`、`nbf`、`sub`、`jti`、`token_use` 和 `scope`。请求体中的旧身份字段仅用于向后兼容，可信身份始终来自 JWT。Spring Boot 与 Agent 必须使用相同的 issuer、Agent audience 和公钥。
 
-调用链约定为：浏览器或 Apifox 登录 Spring Boot 获得默认 30 分钟的 RS256 Access Token，之后使用 Bearer Token 调用 Spring Boot 或 Agent；Spring Boot 转调 Agent、Agent 访问 `/api/agent/facts/**` 时都原样转发该 Token。
+调用链约定为：浏览器或 Apifox 登录 Spring Boot 获得默认 3 天的 RS256 Access Token，之后使用 Bearer Token 调用 Spring Boot 或 Agent；Spring Boot 转调 Agent、Agent 访问 `/api/agent/facts/**` 时都原样转发该 Token。
 
 ## 运行测试
 
