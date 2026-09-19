@@ -12,6 +12,10 @@ def vector_retrieve(
     plan: RetrievalPlan, version: str, allowed: dict[str, KnowledgeChunk],
     embedding: EmbeddingClient, store: CourseMilvusStore, settings: RagSettings,
 ) -> list[KnowledgeHit]:
+    """在预过滤的知识范围内执行 Milvus 向量召回。
+
+    返回结果会应用最小向量分数阈值，并将分数限制到 ``[0, 1]``。
+    """
     vector = embedding.embed(plan.rewritten_query)
     matches = store.search(version, vector, set(allowed), settings.candidate_k)
     return [
@@ -26,7 +30,12 @@ def keyword_retrieve(
     plan: RetrievalPlan, allowed: dict[str, KnowledgeChunk],
     inverted_index: dict[str, list[str]], limit: int,
 ) -> list[KnowledgeHit]:
+    """通过关键词倒排表召回并计算精确匹配分数。
+
+    分数为命中关键词数占计划关键词总数的比例，结果最多返回 ``limit`` 条。
+    """
     hits: list[KnowledgeHit] = []
+    # 先通过倒排表缩小候选范围，再检查关键词是否出现在章节正文中。
     candidate_ids = {
         chunk_id for term in plan.keyword_terms
         for chunk_id in inverted_index.get(term.lower(), [])
@@ -42,6 +51,10 @@ def keyword_retrieve(
 
 
 def merge_hybrid_hits(vector_hits: list[KnowledgeHit], keyword_hits: list[KnowledgeHit]) -> list[KnowledgeHit]:
+    """按知识片段 ID 合并向量和关键词双路召回结果。
+
+    同一片段命中两路时分别保留两路最高分，并去重记录召回来源。
+    """
     merged: dict[str, KnowledgeHit] = {}
     for hit in [*vector_hits, *keyword_hits]:
         existing = merged.get(hit.chunk.chunk_id)

@@ -7,6 +7,7 @@ from domain.rag import Citation, KnowledgeHit
 
 
 def build_citations(hits: list[KnowledgeHit]) -> list[Citation]:
+    """将排序后的知识命中转换为稳定编号的引用信息。"""
     return [Citation(
         citation_id=f"C{number}", source_title=hit.chunk.title,
         source_path=hit.chunk.source_path, section=hit.chunk.section,
@@ -18,7 +19,20 @@ def render_rag_messages(
     command: ChatCommand, intent: IntentResult, hits: list[KnowledgeHit],
     common_fragments: list[PromptFragment], reference_date: str,
 ) -> list[dict[str, str]]:
+    """将可信知识命中渲染为可直接发送给模型的消息。
+
+    Args:
+        command: 当前聊天命令及系统侧用户上下文。
+        intent: 当前意图识别结果。
+        hits: 通过置信度阈值的知识命中。
+        common_fragments: 本轮需要共同生效的提示词约束片段。
+        reference_date: 用于判断课程政策有效性的参考日期。
+
+    Returns:
+        依次包含系统约束和用户问题/证据的消息列表。
+    """
     constraints = "\n".join(fragment.content for fragment in common_fragments)
+    # 使用父章节正文提供完整语境，同时保留 chunk_id 便于回答引用溯源。
     evidence = "\n\n".join(
         f"[{number}: {hit.chunk.chunk_id} | {hit.chunk.source_path} | {hit.chunk.section}]\n{hit.chunk.parent_text}"
         for number, hit in enumerate(hits, start=1)

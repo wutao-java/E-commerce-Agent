@@ -28,11 +28,14 @@ logger = logging.getLogger(__name__)
 
 
 class CourseRagService:
+    """编排课程知识索引校验、混合召回、重排和结果缓存。"""
+
     def __init__(
         self, settings: RagSettings | None = None,
         embedding: EmbeddingClient | None = None,
         store: CourseMilvusStore | None = None,
     ) -> None:
+        """初始化服务，并支持注入 embedding 与存储依赖以便测试。"""
         self.settings = settings or get_rag_settings()
         self.embedding = embedding or EmbeddingClient(self.settings)
         self.store = store or CourseMilvusStore(self.settings)
@@ -41,11 +44,24 @@ class CourseRagService:
         self._lock = Lock()
 
     def _cache_key(self, version: str, plan: RetrievalPlan) -> str:
+        """生成隔离索引版本、检索条件和参考日期的缓存键。"""
         payload = [version, plan.scene, plan.rewritten_query, plan.allowed_topics,
                    plan.keyword_terms, self.settings.reference_date().isoformat()]
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode("utf-8")).hexdigest()
 
     def retrieve(self, command: ChatCommand, intent: Intent) -> tuple[RetrievalPlan, list[KnowledgeHit], dict[str, Any]]:
+        """执行一次课程知识检索。
+
+        Args:
+            command: 当前聊天命令及运行时用户信息。
+            intent: 上游识别出的用户意图。
+
+        Returns:
+            检索计划、通过置信度阈值的知识命中，以及调试信息。
+
+        Raises:
+            RuntimeError: Milvus 索引或 embedding 服务不可用。
+        """
         index = get_knowledge_index()
         chunks = list(index.chunks_by_id.values())
         plan = pre_retrieval_plan(command, intent, chunks)
@@ -56,6 +72,7 @@ class CourseRagService:
             "scene": plan.scene, "allowed_topics": plan.allowed_topics,
             "cache_hit": False, "cache_scope": "retrieval_hits_only",
         }
+        # 实时业务查询和闲聊不应使用静态课程知识作答。
         if plan.realtime or intent == "general_chat":
             debug["fallback_reason"] = "realtime_query" if plan.realtime else "general_chat"
             return plan, [], debug
@@ -71,6 +88,7 @@ class CourseRagService:
             return plan, [], debug
 
         key = self._cache_key(index.version, plan)
+        # 历史查询不缓存，避免与常规有效知识查询共享过期资料结果。
         if not historical:
             with self._lock:
                 cached = self._cache.get(key)
@@ -82,6 +100,7 @@ class CourseRagService:
                 self._cache.pop(key, None)
 
         try:
+            # 每个索引版本在进程生命周期内只执行一次完整性校验。
             if self._verified_version != index.version:
                 self.store.verify(index.version, set(index.chunks_by_id))
                 self._verified_version = index.version
@@ -110,6 +129,11 @@ class CourseRagService:
         return plan, reliable, debug
 
     def publish(self) -> tuple[str, int]:
+        """向量化当前知识快照并发布对应版本的 Milvus 索引。
+
+        Returns:
+            已发布的 collection 名称和知识片段数量。
+        """
         index = get_knowledge_index()
         chunks = list(index.chunks_by_id.values())
         vectors = self.embedding.embed_many([embedding_text(chunk) for chunk in chunks])

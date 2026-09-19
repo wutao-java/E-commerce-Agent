@@ -14,6 +14,14 @@ CASES_PATH = PROJECT_ROOT / "knowledge" / "course" / "quality_cases.json"
 
 
 def run_rag_quality_check(service: CourseRagService) -> dict:
+    """运行课程问题集并统计每个用例的召回质量。
+
+    Args:
+        service: 待评估的课程 RAG 服务。
+
+    Returns:
+        用例总数、通过数，以及逐用例的召回率、准确率和通过状态。
+    """
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     results = []
     for case in cases:
@@ -23,6 +31,7 @@ def run_rag_quality_check(service: CourseRagService) -> dict:
         retrieved = {hit.chunk.chunk_id for hit in hits}
         expected = set(case["expected_chunk_ids"])
         must_fallback = bool(case["must_fallback"])
+        # 降级用例以“未召回知识”为通过，普通用例至少应命中一个预期片段。
         results.append({
             "case_id": case["case_id"],
             "retrieved_chunk_ids": sorted(retrieved),

@@ -9,6 +9,15 @@ from domain.rag import KnowledgeHit, RetrievalPlan
 
 
 def rerank_lightweight(plan: RetrievalPlan, candidates: list[KnowledgeHit]) -> list[KnowledgeHit]:
+    """使用双路命中、场景匹配和资料状态对候选进行本地重排。
+
+    Args:
+        plan: 当前检索计划。
+        candidates: 合并后的向量与关键词候选。
+
+    Returns:
+        按综合分数降序排列的新命中列表。
+    """
     ranked: list[KnowledgeHit] = []
     for hit in candidates:
         both = hit.vector_score > 0 and hit.keyword_score > 0
@@ -30,6 +39,16 @@ def rerank_lightweight(plan: RetrievalPlan, candidates: list[KnowledgeHit]) -> l
 
 
 def rerank_candidates(plan: RetrievalPlan, candidates: list[KnowledgeHit], settings: RagSettings) -> list[KnowledgeHit]:
+    """优先调用商业 reranker，未配置或调用失败时使用本地重排。
+
+    Args:
+        plan: 当前检索计划。
+        candidates: 待精排的候选知识。
+        settings: 包含 reranker 地址、模型和密钥的 RAG 配置。
+
+    Returns:
+        按相关性降序排列的候选列表。
+    """
     if not candidates or not settings.rerank_model or not settings.rerank_base_url:
         return rerank_lightweight(plan, candidates)
     key = settings.rerank_api_key.get_secret_value()
@@ -52,6 +71,7 @@ def rerank_candidates(plan: RetrievalPlan, candidates: list[KnowledgeHit], setti
         ranked = []
         for item in results:
             index = item["index"]
+            # 忽略服务端返回的非法下标，避免错误候选污染结果。
             if not isinstance(index, int) or index < 0 or index >= len(candidates):
                 continue
             score = max(0.0, min(1.0, float(item.get("relevance_score", item.get("score", 0)))))
@@ -61,5 +81,6 @@ def rerank_candidates(plan: RetrievalPlan, candidates: list[KnowledgeHit], setti
         if ranked:
             return sorted(ranked, key=lambda hit: hit.score, reverse=True)
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        # 精排是可选增强能力，失败时保留本地确定性排序作为降级路径。
         pass
     return rerank_lightweight(plan, candidates)
